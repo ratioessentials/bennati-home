@@ -1,0 +1,62 @@
+# Bennati Home - .gitignore
+
+# Dependencies
+node_modules/
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Environment files - NON committare credenziali!
+.env
+.env.local
+.env.production
+backend/.env
+
+# Database - NON committare il database!
+*.db
+*.sqlite
+*.sqlite3
+backend/sparkle_clean.db
+
+# Logs
+*.log
+logs/
+backend/logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+.DS_Store?
+._*
+
+# Docker
+*.tar.gz
+
+# Backups
+backups/
+backup_*.db
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
