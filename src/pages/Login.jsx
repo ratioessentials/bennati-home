@@ -43,7 +43,7 @@ export default function Login() {
             </div>
           </div>
           <CardTitle className="text-3xl font-bold text-center text-gray-900">
-            Bennati Home
+            Perfect House
           </CardTitle>
           <CardDescription className="text-center text-gray-600 text-base">
             Gestione Proprietà Immobiliari

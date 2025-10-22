@@ -97,7 +97,7 @@ ${data.notes ? `Note: ${data.notes}` : ''}
 ${supply?.amazon_link ? `🛒 Link Acquisto: ${supply.amazon_link}` : ''}
 
 ---
-Bennati Home - Sistema di Gestione Pulizie
+Perfect House - Sistema di Gestione Pulizie
           `
         });
       }

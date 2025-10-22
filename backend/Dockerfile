@@ -1,4 +1,4 @@
-# Backend Dockerfile per Bennati Home
+# Backend Dockerfile per Perfect House
 FROM python:3.9-slim
 
 # Imposta directory di lavoro

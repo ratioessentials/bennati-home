@@ -73,7 +73,7 @@ export default function Layout({ children, currentPageName }) {
           <div className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-teal-600 to-cyan-700 shadow-xl">
             <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
               <div className="flex flex-shrink-0 items-center px-6 mb-8">
-                <h1 className="text-2xl font-bold text-white">Bennati Home</h1>
+                <h1 className="text-2xl font-bold text-white">Perfect House</h1>
               </div>
               <nav className="mt-5 flex-1 space-y-2 px-3">
                 {menuItems.map((item) => {
@@ -121,7 +121,7 @@ export default function Layout({ children, currentPageName }) {
       {/* Mobile Header */}
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-teal-600 to-cyan-700 shadow-lg">
         <div className="flex items-center justify-between p-4">
-          <h1 className="text-xl font-bold text-white">Bennati Home</h1>
+          <h1 className="text-xl font-bold text-white">Perfect House</h1>
           {(isAdmin || isOperator) && (
             <Button
               variant="ghost"

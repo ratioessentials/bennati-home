@@ -1,4 +1,4 @@
-# 🧹 Sparkle Clean
+# 🏠 Perfect House - Gestione Pulizie
 
 Piattaforma completa per la gestione della pulizia degli appartamenti, sviluppata con React (frontend) e Python/FastAPI (backend).
 
@@ -6,14 +6,33 @@ Piattaforma completa per la gestione della pulizia degli appartamenti, sviluppat
 
 - ✅ **Gestione Proprietà e Appartamenti** - Organizza strutture e unità abitative
 - ✅ **Checklist Personalizzabili** - Crea task di pulizia per ogni stanza
-- ✅ **Tracciamento Completamenti** - Monitora il lavoro degli operatori
+- ✅ **Tracciamento Completamenti** - Monitora il lavoro degli operatori in tempo reale
+- ✅ **Storico Operazioni** - Visualizza tutte le pulizie effettuate con tempi e dettagli
 - ✅ **Gestione Forniture** - Inventario con alert per scorte basse
 - ✅ **Multi-ruolo** - Admin e operatori con permessi differenziati
-- ✅ **Autenticazione JWT** - Sistema sicuro di login
+- ✅ **Autenticazione JWT** - Sistema sicuro di login con gestione credenziali
 - ✅ **API REST** - Backend completo con documentazione Swagger
 - ✅ **UI Moderna** - Interfaccia responsive con Tailwind CSS e shadcn/ui
+- ✅ **Deploy Ready** - Configurazione Docker e Portainer inclusa
 
-## 🚀 Quick Start
+## 🚀 Deploy in Produzione (CONSIGLIATO)
+
+Per deployare su un server con Portainer:
+
+```bash
+# Esegui lo script di setup
+./setup-portainer.sh
+```
+
+Poi segui la guida: **[DEPLOY_QUICK_START.md](./DEPLOY_QUICK_START.md)**
+
+Per istruzioni dettagliate: **[DEPLOY_PORTAINER.md](./DEPLOY_PORTAINER.md)**
+
+---
+
+## 💻 Sviluppo Locale
+
+### Quick Start con Docker
 
 ### Prerequisiti
 - Node.js 16+

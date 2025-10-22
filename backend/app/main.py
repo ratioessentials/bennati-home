@@ -20,7 +20,7 @@ from .routers import (
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="Sparkle Clean API",
+    title="Perfect House API",
     description="API per la gestione della pulizia degli appartamenti",
     version="1.0.0"
 )
@@ -51,7 +51,7 @@ app.include_router(work_sessions.router, prefix="/api")
 @app.get("/")
 def root():
     return {
-        "message": "Sparkle Clean API",
+        "message": "Perfect House API",
         "version": "1.0.0",
         "docs": "/docs"
     }

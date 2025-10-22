@@ -23,7 +23,7 @@ def init_database():
         
         # Crea admin
         admin = User(
-            email="admin@sparkle.com",
+            email="admin@perfecthouse.com",
             name="Admin",
             role="admin",
             hashed_password=get_password_hash("admin123")
@@ -32,7 +32,7 @@ def init_database():
         
         # Crea operatore
         operator = User(
-            email="operator@sparkle.com",
+            email="operator@perfecthouse.com",
             name="Mario Rossi",
             role="operator",
             hashed_password=get_password_hash("operator123")
@@ -207,10 +207,10 @@ def init_database():
         print("\nCredenziali di accesso:")
         print("━" * 50)
         print("Admin:")
-        print("  Email: admin@sparkle.com")
+        print("  Email: admin@perfecthouse.com")
         print("  Password: admin123")
         print("\nOperatore:")
-        print("  Email: operator@sparkle.com")
+        print("  Email: operator@perfecthouse.com")
         print("  Password: operator123")
         print("━" * 50)
         
