@@ -41,7 +41,7 @@ export default function OperatorSupplies() {
   const [alertType, setAlertType] = useState("terminato");
 
   React.useEffect(() => {
-    apiClient.auth.me().then(setUser).catch(() => {});
+    apiClient.getCurrentUser().then(setUser).catch(() => {});
   }, []);
 
   const { data: properties } = useQuery({
@@ -169,14 +169,17 @@ Bennati Home - Sistema di Gestione Pulizie
                   <SelectValue placeholder="Seleziona struttura" />
                 </SelectTrigger>
                 <SelectContent>
-                  {properties.map((property) => (
-                    <SelectItem key={property.id} value={property.id}>
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4" />
-                        {property.name}
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {properties.map((property) => {
+                    const propertyId = `${property.id}`;
+                    return (
+                      <SelectItem key={property.id} value={propertyId}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4" />
+                          {property.name}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -192,14 +195,17 @@ Bennati Home - Sistema di Gestione Pulizie
                     <SelectValue placeholder="Seleziona appartamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {apartments.map((apt) => (
-                      <SelectItem key={apt.id} value={apt.id}>
-                        <div className="flex items-center gap-2">
-                          <Home className="w-4 h-4" />
-                          {apt.name}
-                        </div>
-                      </SelectItem>
-                    ))}
+                    {apartments.map((apt) => {
+                      const apartmentId = `${apt.id}`;
+                      return (
+                        <SelectItem key={apt.id} value={apartmentId}>
+                          <div className="flex items-center gap-2">
+                            <Home className="w-4 h-4" />
+                            {apt.name}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>

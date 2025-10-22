@@ -17,6 +17,7 @@ class User(Base):
     # Relazioni
     completions = relationship("ChecklistCompletion", back_populates="user")
     supply_alerts = relationship("SupplyAlert", back_populates="reported_by_user")
+    work_sessions = relationship("WorkSession", back_populates="user")
 
 
 class Property(Base):
@@ -52,6 +53,7 @@ class Apartment(Base):
     rooms = relationship("Room", back_populates="apartment", cascade="all, delete-orphan")
     checklist_items = relationship("ChecklistItem", back_populates="apartment", cascade="all, delete-orphan")
     supplies = relationship("Supply", back_populates="apartment", cascade="all, delete-orphan")
+    work_sessions = relationship("WorkSession", back_populates="apartment")
 
 
 class Room(Base):
@@ -85,18 +87,37 @@ class ChecklistItem(Base):
     completions = relationship("ChecklistCompletion", back_populates="checklist_item", cascade="all, delete-orphan")
 
 
+class WorkSession(Base):
+    __tablename__ = "work_sessions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    apartment_id = Column(Integer, ForeignKey("apartments.id"), nullable=False)
+    start_time = Column(DateTime, default=datetime.utcnow, nullable=False)
+    end_time = Column(DateTime, nullable=True)
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relazioni
+    user = relationship("User", back_populates="work_sessions")
+    apartment = relationship("Apartment", back_populates="work_sessions")
+    completions = relationship("ChecklistCompletion", back_populates="work_session", cascade="all, delete-orphan")
+
+
 class ChecklistCompletion(Base):
     __tablename__ = "checklist_completions"
 
     id = Column(Integer, primary_key=True, index=True)
     checklist_item_id = Column(Integer, ForeignKey("checklist_items.id"), nullable=False)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    work_session_id = Column(Integer, ForeignKey("work_sessions.id"), nullable=True)
     completed_at = Column(DateTime, default=datetime.utcnow)
     notes = Column(Text, nullable=True)
     
     # Relazioni
     checklist_item = relationship("ChecklistItem", back_populates="completions")
     user = relationship("User", back_populates="completions")
+    work_session = relationship("WorkSession", back_populates="completions")
 
 
 class Supply(Base):

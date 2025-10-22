@@ -13,7 +13,9 @@ RUN npm ci
 # Copia il resto del codice
 COPY . .
 
-# Build dell'applicazione
+# Build dell'applicazione con variabile d'ambiente
+ARG VITE_API_URL=http://localhost:8080
+ENV VITE_API_URL=$VITE_API_URL
 RUN npm run build
 
 # Stage 2: Nginx per servire il frontend

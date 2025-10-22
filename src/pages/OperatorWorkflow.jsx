@@ -34,11 +34,12 @@ export default function OperatorWorkflow() {
   const [currentStep, setCurrentStep] = useState(1);
   const [selectedProperty, setSelectedProperty] = useState("");
   const [selectedApartment, setSelectedApartment] = useState("");
+  const [workSessionId, setWorkSessionId] = useState(null);
   const [finalNotes, setFinalNotes] = useState("");
   const [supplyUpdates, setSupplyUpdates] = useState({});
 
   React.useEffect(() => {
-    apiClient.auth.me().then(setUser).catch(() => {});
+    apiClient.getCurrentUser().then(setUser).catch(() => {});
   }, []);
 
   const { data: properties } = useQuery({
@@ -58,54 +59,116 @@ export default function OperatorWorkflow() {
 
   const { data: checklistItems } = useQuery({
     queryKey: ['checklist-items', selectedApartment],
-    queryFn: () => selectedApartment
-      ? apiClient.getChecklistItems({ apartment_id: selectedApartment, active: true }, 'order')
-      : Promise.resolve([]),
+    queryFn: () => {
+      const apartmentValue = typeof selectedApartment === 'object' ? null : selectedApartment;
+      const apartmentId = parseInt(apartmentValue);
+      return apartmentValue && !isNaN(apartmentId)
+        ? apiClient.getChecklistItems({ apartment_id: apartmentId, active: true }, 'order')
+        : Promise.resolve([]);
+    },
     initialData: [],
-    enabled: !!selectedApartment,
+    enabled: !!selectedApartment && typeof selectedApartment !== 'object' && !isNaN(parseInt(selectedApartment)),
+  });
+
+  const { data: rooms } = useQuery({
+    queryKey: ['rooms', selectedApartment],
+    queryFn: () => {
+      const apartmentValue = typeof selectedApartment === 'object' ? null : selectedApartment;
+      const apartmentId = parseInt(apartmentValue);
+      return apartmentValue && !isNaN(apartmentId)
+        ? apiClient.getRooms(apartmentId)  // PASSA IL VALORE DIRETTO, NON UN OGGETTO
+        : Promise.resolve([]);
+    },
+    initialData: [],
+    enabled: !!selectedApartment && typeof selectedApartment !== 'object' && !isNaN(parseInt(selectedApartment)),
   });
 
   const { data: supplies } = useQuery({
     queryKey: ['supplies', selectedApartment],
-    queryFn: () => selectedApartment
-      ? apiClient.getSupplies({ apartment_id: selectedApartment })
-      : Promise.resolve([]),
-    initialData: [],
-    enabled: !!selectedApartment,
-  });
-
-  const { data: completions } = useQuery({
-    queryKey: ['completions', selectedApartment, user?.id],
-    queryFn: async () => {
-      if (!selectedApartment || !user) return [];
-      return apiClient.getCompletions({
-        apartment_id: selectedApartment,
-        operator_id: user.id
-      });
+    queryFn: () => {
+      const apartmentValue = typeof selectedApartment === 'object' ? null : selectedApartment;
+      const apartmentId = parseInt(apartmentValue);
+      return apartmentValue && !isNaN(apartmentId)
+        ? apiClient.getSupplies({ apartment_id: apartmentId })
+        : Promise.resolve([]);
     },
     initialData: [],
-    enabled: !!selectedApartment && !!user,
+    enabled: !!selectedApartment && typeof selectedApartment !== 'object' && !isNaN(parseInt(selectedApartment)),
+  });
+
+  const { data: completions, refetch: refetchCompletions } = useQuery({
+    queryKey: ['completions', workSessionId],
+    queryFn: async () => {
+      if (!workSessionId) return [];
+      console.log('🔄 Fetching completions for session:', workSessionId);
+      // Filtra solo le completions della sessione corrente
+      const allCompletions = await apiClient.getCompletions({
+        user_id: user.id
+      });
+      const filtered = allCompletions.filter(c => c.work_session_id === workSessionId);
+      console.log('📦 Completions fetched:', filtered.length, filtered);
+      return filtered;
+    },
+    initialData: [],
+    enabled: !!workSessionId && !!user,
+    staleTime: 0, // I dati sono sempre considerati stale
+  });
+
+  // DEBUG: Log stato importante
+  React.useEffect(() => {
+    console.log('🔍 STATE CHECK:', {
+      user: user?.id,
+      workSessionId: workSessionId,
+      currentStep: currentStep,
+      selectedApartment: selectedApartment,
+      checklistItemsCount: checklistItems?.length || 0,
+      completionsCount: completions?.length || 0
+    });
+  }, [user, workSessionId, currentStep, selectedApartment, checklistItems, completions]);
+
+  // Mutation per creare una work session
+  const createWorkSessionMutation = useMutation({
+    mutationFn: async () => {
+      const session = await apiClient.createWorkSession({
+        apartment_id: parseInt(selectedApartment),
+        notes: null
+      });
+      return session;
+    },
+    onSuccess: (session) => {
+      setWorkSessionId(session.id);
+      setCurrentStep(2);
+    },
   });
 
   const toggleCompletionMutation = useMutation({
     mutationFn: async ({ itemId, completed }) => {
+      console.log('🔘 Toggle mutation called:', { itemId, completed, userId: user?.id, workSessionId });
+      
       if (completed) {
         const completion = completions.find(c => c.checklist_item_id === itemId);
         if (completion) {
+          console.log('🗑️ Deleting completion:', completion.id);
           await apiClient.deleteCompletion(completion.id);
         }
       } else {
+        console.log('✅ Creating completion...');
         await apiClient.createCompletion({
-          apartment_id: selectedApartment,
           checklist_item_id: itemId,
-          operator_id: user.id,
-          completed: true,
-          completion_date: new Date().toISOString()
+          user_id: user.id,
+          work_session_id: workSessionId
         });
       }
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['completions'] });
+    onSuccess: async () => {
+      console.log('✅ Toggle mutation SUCCESS');
+      // Invalida e refetch manuale
+      await queryClient.invalidateQueries({ queryKey: ['completions', workSessionId] });
+      await refetchCompletions();
+      console.log('🔄 Refetch completato');
+    },
+    onError: (error) => {
+      console.error('❌ Toggle mutation ERROR:', error);
     },
   });
 
@@ -117,8 +180,8 @@ export default function OperatorWorkflow() {
       if (newQuantity <= supply.min_quantity) {
         await apiClient.createSupplyAlert({
           supply_id: supplyId,
-          apartment_id: selectedApartment,
-          operator_id: user.id,
+          apartment_id: parseInt(selectedApartment),
+          user_id: user.id,
           alert_type: newQuantity === 0 ? 'terminato' : 'in_esaurimento',
           resolved: false
         });
@@ -132,17 +195,39 @@ export default function OperatorWorkflow() {
   const completeWorkMutation = useMutation({
     mutationFn: async () => {
       // Salva gli aggiornamenti delle scorte
-      for (const [supplyId, newQuantity] of Object.entries(supplyUpdates)) {
-        await updateSupplyMutation.mutateAsync({ supplyId, newQuantity: parseInt(newQuantity) });
+      const updates = Object.entries(supplyUpdates);
+      
+      if (updates.length > 0) {
+        for (const [supplyId, newQuantity] of updates) {
+          try {
+            await updateSupplyMutation.mutateAsync({ 
+              supplyId: parseInt(supplyId), 
+              newQuantity: parseInt(newQuantity) 
+            });
+          } catch (error) {
+            console.error(`Errore aggiornamento scorta ${supplyId}:`, error);
+          }
+        }
       }
       
-      // Se ci sono note, salvale (potresti creare un'entità WorkSession)
-      if (finalNotes) {
-        // Opzionale: salvare le note in un'entità dedicata
+      // Chiudi la work session con end_time e note finali
+      if (workSessionId) {
+        await apiClient.updateWorkSession(workSessionId, {
+          end_time: new Date().toISOString(),
+          notes: finalNotes || null
+        });
       }
+      
+      return true;
     },
     onSuccess: () => {
+      queryClient.invalidateQueries(['work-sessions']);
       setCurrentStep(5); // Step finale di ringraziamento
+    },
+    onError: (error) => {
+      console.error('Errore nel completamento operazione:', error);
+      // Anche in caso di errore, procediamo allo step 5
+      setCurrentStep(5);
     },
   });
 
@@ -151,7 +236,9 @@ export default function OperatorWorkflow() {
   };
 
   const handleToggle = (itemId) => {
+    console.log('🖱️ handleToggle clicked:', { itemId, isPending: toggleCompletionMutation.isPending });
     const completed = isCompleted(itemId);
+    console.log('🖱️ isCompleted:', completed);
     toggleCompletionMutation.mutate({ itemId, completed });
   };
 
@@ -188,12 +275,12 @@ export default function OperatorWorkflow() {
   };
 
   const getSelectedApartmentName = () => {
-    const apt = apartments.find(a => a.id === selectedApartment);
+    const apt = apartments.find(a => a.id === parseInt(selectedApartment));
     return apt?.name || "";
   };
 
   const getSelectedPropertyName = () => {
-    const prop = properties.find(p => p.id === selectedProperty);
+    const prop = properties.find(p => p.id === parseInt(selectedProperty));
     return prop?.name || "";
   };
 
@@ -253,14 +340,17 @@ export default function OperatorWorkflow() {
                       <SelectValue placeholder="Scegli una struttura..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {properties.map((property) => (
-                        <SelectItem key={property.id} value={property.id} className="text-lg py-3">
-                          <div className="flex items-center gap-2">
-                            <Building2 className="w-5 h-5" />
-                            {property.name}
-                          </div>
-                        </SelectItem>
-                      ))}
+                      {properties.map((property) => {
+                        const propertyId = `${property.id}`; // Forza conversione a stringa
+                        return (
+                          <SelectItem key={property.id} value={propertyId} className="text-lg py-3">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-5 h-5" />
+                              {property.name}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -279,14 +369,17 @@ export default function OperatorWorkflow() {
                         <SelectValue placeholder="Scegli un appartamento..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {apartments.map((apt) => (
-                          <SelectItem key={apt.id} value={apt.id} className="text-lg py-3">
-                            <div className="flex items-center gap-2">
-                              <Home className="w-5 h-5" />
-                              {apt.name}
-                            </div>
-                          </SelectItem>
-                        ))}
+                        {apartments.map((apt) => {
+                          const apartmentId = `${apt.id}`; // Forza conversione a stringa
+                          return (
+                            <SelectItem key={apt.id} value={apartmentId} className="text-lg py-3">
+                              <div className="flex items-center gap-2">
+                                <Home className="w-5 h-5" />
+                                {apt.name}
+                              </div>
+                            </SelectItem>
+                          );
+                        })}
                       </SelectContent>
                     </Select>
                   </div>
@@ -304,11 +397,11 @@ export default function OperatorWorkflow() {
             {selectedApartment && (
               <Button
                 size="lg"
-                onClick={() => setCurrentStep(2)}
-                disabled={!canProceedToStep2}
+                onClick={() => createWorkSessionMutation.mutate()}
+                disabled={!canProceedToStep2 || createWorkSessionMutation.isPending}
                 className="w-full h-14 text-lg bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 shadow-lg animate-in slide-in-from-bottom duration-500"
               >
-                Inizia Pulizia
+                {createWorkSessionMutation.isPending ? 'Avvio...' : 'Inizia Pulizia'}
                 <ChevronRight className="w-5 h-5 ml-2" />
               </Button>
             )}
@@ -337,59 +430,103 @@ export default function OperatorWorkflow() {
               </CardContent>
             </Card>
 
-            <div className="space-y-3">
-              {checklistItems.map((item, index) => {
-                const completed = isCompleted(item.id);
-                return (
-                  <Card
-                    key={item.id}
-                    className={`border-none shadow-lg transition-all duration-300 ${
-                      completed ? 'bg-green-50 border-2 border-green-300' : 'hover:shadow-xl'
-                    }`}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start gap-4">
-                        <button
-                          onClick={() => handleToggle(item.id)}
-                          className="flex-shrink-0 mt-1 transition-transform active:scale-90"
-                          disabled={toggleCompletionMutation.isPending}
+            <div className="space-y-6">
+              {(() => {
+                // Raggruppa checklist per stanza
+                const itemsByRoom = checklistItems.reduce((acc, item) => {
+                  const roomId = item.room_id || 'no_room';
+                  if (!acc[roomId]) acc[roomId] = [];
+                  acc[roomId].push(item);
+                  return acc;
+                }, {});
+
+                // Funzione per ottenere il nome della stanza
+                const getRoomName = (roomId) => {
+                  if (roomId === 'no_room') return 'Generale';
+                  const room = rooms.find(r => r.id === roomId);
+                  return room?.name || 'Stanza Sconosciuta';
+                };
+
+                return Object.entries(itemsByRoom).map(([roomId, items]) => (
+                  <div key={roomId} className="space-y-3">
+                    {/* Intestazione Stanza */}
+                    <div className="sticky top-36 z-30 bg-gradient-to-r from-cyan-50 to-teal-50 rounded-lg p-3 shadow-md border-l-4 border-teal-500">
+                      <div className="flex items-center gap-2">
+                        <Home className="w-5 h-5 text-teal-600" />
+                        <h3 className="font-bold text-lg text-gray-800">{getRoomName(parseInt(roomId))}</h3>
+                        <Badge className="bg-teal-100 text-teal-700 ml-auto">
+                          {items.filter(item => isCompleted(item.id)).length}/{items.length}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Checklist Items della Stanza */}
+                    {items.map((item) => {
+                      const completed = isCompleted(item.id);
+                      return (
+                        <Card
+                          key={item.id}
+                          className={`border-none shadow-lg transition-all duration-300 ${
+                            completed ? 'bg-green-50 border-2 border-green-300' : 'hover:shadow-xl'
+                          }`}
                         >
-                          {completed ? (
-                            <div className="relative">
-                              <CheckCircle2 className="w-10 h-10 text-green-600" />
-                              <div className="absolute inset-0 animate-ping">
-                                <CheckCircle2 className="w-10 h-10 text-green-400 opacity-75" />
+                          <CardContent className="p-4">
+                            <div className="flex items-start gap-4">
+                              <button
+                                onClick={() => handleToggle(item.id)}
+                                className="flex-shrink-0 mt-1 transition-transform active:scale-90"
+                                disabled={toggleCompletionMutation.isPending}
+                              >
+                                {completed ? (
+                                  <div className="relative">
+                                    <CheckCircle2 className="w-10 h-10 text-green-600" />
+                                    <div className="absolute inset-0 animate-ping">
+                                      <CheckCircle2 className="w-10 h-10 text-green-400 opacity-75" />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <Circle className="w-10 h-10 text-gray-300 hover:text-teal-600 transition-colors" />
+                                )}
+                              </button>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  {item.is_mandatory && (
+                                    <Badge className="bg-orange-100 text-orange-700 text-xs">
+                                      Obbligatoria
+                                    </Badge>
+                                  )}
+                                </div>
+                                <p className={`text-lg font-bold mb-1 ${
+                                  completed ? 'line-through text-gray-500' : 'text-gray-900'
+                                }`}>
+                                  {item.title}
+                                </p>
+                                {item.description && (
+                                  <p className={`text-sm ${
+                                    completed ? 'text-gray-400' : 'text-gray-600'
+                                  }`}>
+                                    {item.description}
+                                  </p>
+                                )}
                               </div>
                             </div>
-                          ) : (
-                            <Circle className="w-10 h-10 text-gray-300 hover:text-teal-600 transition-colors" />
-                          )}
-                        </button>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <span className="text-sm font-bold text-gray-400">#{index + 1}</span>
-                            <Badge className={categoryColors[item.category]}>
-                              {item.category}
-                            </Badge>
-                          </div>
-                          <p className={`text-lg font-medium ${
-                            completed ? 'line-through text-gray-500' : 'text-gray-900'
-                          }`}>
-                            {item.description}
-                          </p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                ));
+              })()}
             </div>
 
             <div className="flex gap-3 pt-4 sticky bottom-4">
               <Button
                 variant="outline"
                 size="lg"
-                onClick={() => setCurrentStep(1)}
+                onClick={() => {
+                  setCurrentStep(1);
+                  setWorkSessionId(null); // Reset work session quando si torna indietro
+                }}
                 className="flex-1 h-14"
               >
                 <ChevronLeft className="w-5 h-5 mr-2" />
@@ -635,6 +772,7 @@ export default function OperatorWorkflow() {
                     setCurrentStep(1);
                     setSelectedProperty("");
                     setSelectedApartment("");
+                    setWorkSessionId(null); // Reset work session
                     setFinalNotes("");
                     setSupplyUpdates({});
                     queryClient.invalidateQueries();

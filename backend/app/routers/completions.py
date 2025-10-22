@@ -7,14 +7,16 @@ from ..database import get_db
 router = APIRouter(prefix="/completions", tags=["completions"])
 
 
-@router.get("", response_model=List[schemas.ChecklistCompletion])
+@router.get("")
 def get_completions(
     checklist_item_id: Optional[int] = Query(None),
     user_id: Optional[int] = Query(None),
+    apartment_id: Optional[int] = Query(None),
+    limit: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
 ):
-    query = db.query(models.ChecklistCompletion)
+    query = db.query(models.ChecklistCompletion).join(models.ChecklistItem)
     
     if checklist_item_id is not None:
         query = query.filter(models.ChecklistCompletion.checklist_item_id == checklist_item_id)
@@ -22,7 +24,29 @@ def get_completions(
     if user_id is not None:
         query = query.filter(models.ChecklistCompletion.user_id == user_id)
     
-    return query.order_by(models.ChecklistCompletion.completed_at.desc()).all()
+    if apartment_id is not None:
+        query = query.filter(models.ChecklistItem.apartment_id == apartment_id)
+    
+    completions = query.order_by(models.ChecklistCompletion.completed_at.desc())
+    
+    if limit is not None:
+        completions = completions.limit(limit)
+    
+    # Restituisci i dati con apartment_id e work_session_id
+    results = []
+    for completion in completions.all():
+        results.append({
+            "id": completion.id,
+            "checklist_item_id": completion.checklist_item_id,
+            "user_id": completion.user_id,
+            "work_session_id": completion.work_session_id,  # AGGIUNTO!
+            "completed_at": completion.completed_at.isoformat() if completion.completed_at else None,
+            "notes": completion.notes,
+            "apartment_id": completion.checklist_item.apartment_id if completion.checklist_item else None,
+            "checklist_item_title": completion.checklist_item.title if completion.checklist_item else None
+        })
+    
+    return results
 
 
 @router.post("", response_model=schemas.ChecklistCompletion)

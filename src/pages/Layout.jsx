@@ -32,6 +32,13 @@ export default function Layout({ children, currentPageName }) {
       .finally(() => setLoading(false));
   }, []);
 
+  // Reindirizza operatori all'OperatorWorkflow se sono sulla Dashboard
+  React.useEffect(() => {
+    if (user?.role === 'operator' && currentPageName === 'Dashboard') {
+      window.location.href = '/OperatorWorkflow';
+    }
+  }, [user, currentPageName]);
+
   const isAdmin = user?.role === 'admin';
   const isOperator = user?.role === 'operator';
 
@@ -39,7 +46,7 @@ export default function Layout({ children, currentPageName }) {
     { name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" },
     { name: "Strutture", icon: Building2, page: "Properties" },
     { name: "Appartamenti", icon: Home, page: "Apartments" },
-    { name: "Operatori", icon: Users, page: "Operators" },
+    { name: "Operazioni", icon: Users, page: "Operators" },
   ];
 
   const operatorMenuItems = [
@@ -61,7 +68,7 @@ export default function Layout({ children, currentPageName }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
       {/* Desktop Sidebar */}
-      {isAdmin && (
+      {(isAdmin || isOperator) && (
         <div className="hidden md:fixed md:inset-y-0 md:flex md:w-64 md:flex-col">
           <div className="flex min-h-0 flex-1 flex-col bg-gradient-to-b from-teal-600 to-cyan-700 shadow-xl">
             <div className="flex flex-1 flex-col overflow-y-auto pt-5 pb-4">
@@ -115,7 +122,7 @@ export default function Layout({ children, currentPageName }) {
       <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-teal-600 to-cyan-700 shadow-lg">
         <div className="flex items-center justify-between p-4">
           <h1 className="text-xl font-bold text-white">Bennati Home</h1>
-          {isAdmin && (
+          {(isAdmin || isOperator) && (
             <Button
               variant="ghost"
               size="icon"
@@ -127,7 +134,7 @@ export default function Layout({ children, currentPageName }) {
           )}
         </div>
         
-        {mobileMenuOpen && isAdmin && (
+        {mobileMenuOpen && (isAdmin || isOperator) && (
           <div className="bg-teal-700 border-t border-teal-500">
             <nav className="px-2 py-3 space-y-1">
               {menuItems.map((item) => {
@@ -162,8 +169,8 @@ export default function Layout({ children, currentPageName }) {
       </div>
 
       {/* Main Content */}
-      <div className={isAdmin ? "md:pl-64" : ""}>
-        <main className={`${isAdmin ? 'md:pt-0 pt-16' : 'pt-16'} ${isOperator ? 'pb-20' : ''}`}>
+      <div className={(isAdmin || isOperator) ? "md:pl-64" : ""}>
+        <main className={`${(isAdmin || isOperator) ? 'md:pt-0 pt-16' : 'pt-16'} ${isOperator ? 'pb-20' : ''}`}>
           {children}
         </main>
       </div>

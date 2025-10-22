@@ -1,7 +1,7 @@
 // API Client per il backend Python
 // L'URL viene preso dalla variabile d'ambiente o usa localhost come default
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000') + '/api';
 
 class ApiClient {
   constructor() {
@@ -37,13 +37,66 @@ class ApiClient {
       const response = await fetch(`${this.baseUrl}${endpoint}`, config);
       
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'API Error');
+        let errorMessage = 'Errore sconosciuto';
+        let errorDetails = null;
+
+        try {
+          const errorData = await response.json();
+          
+          // Gestione errori di validazione (422)
+          if (response.status === 422 && errorData.detail) {
+            if (Array.isArray(errorData.detail)) {
+              // Errori di validazione Pydantic
+              const fieldErrors = errorData.detail.map(err => {
+                const field = err.loc ? err.loc.join('.') : 'campo';
+                return `${field}: ${err.msg}`;
+              }).join(', ');
+              errorMessage = `Errore di validazione: ${fieldErrors}`;
+            } else {
+              errorMessage = errorData.detail;
+            }
+          }
+          // Gestione errori di autenticazione (401)
+          else if (response.status === 401) {
+            errorMessage = errorData.detail || 'Email o password non corretti';
+          }
+          // Gestione errori di autorizzazione (403)
+          else if (response.status === 403) {
+            errorMessage = errorData.detail || 'Non hai i permessi per questa operazione';
+          }
+          // Gestione errori non trovato (404)
+          else if (response.status === 404) {
+            errorMessage = errorData.detail || 'Risorsa non trovata';
+          }
+          // Gestione altri errori
+          else if (errorData.detail) {
+            errorMessage = errorData.detail;
+          } else if (errorData.message) {
+            errorMessage = errorData.message;
+          }
+
+          errorDetails = errorData;
+        } catch (parseError) {
+          // Se non riusciamo a parsare il JSON, usiamo il messaggio di default
+          errorMessage = `Errore ${response.status}: ${response.statusText}`;
+        }
+
+        const error = new Error(errorMessage);
+        error.status = response.status;
+        error.details = errorDetails;
+        throw error;
       }
 
       return await response.json();
     } catch (error) {
-      console.error('API Request failed:', error);
+      // Se l'errore è di rete (fetch fallito completamente)
+      if (error.message === 'Failed to fetch') {
+        const networkError = new Error('Impossibile contattare il server. Verifica la connessione.');
+        console.error('Errore di rete:', networkError);
+        throw networkError;
+      }
+      
+      console.error('Errore API:', error.message);
       throw error;
     }
   }
@@ -240,10 +293,60 @@ class ApiClient {
     return this.request(`/users?${params}`);
   }
 
+  async createUser(data) {
+    return this.request('/users', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateUser(userId, data) {
+    return this.request(`/users/${userId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteUser(userId) {
+    return this.request(`/users/${userId}`, {
+      method: 'DELETE',
+    });
+  }
+
   async inviteUser(data) {
     return this.request('/users/invite', {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  // WORK SESSIONS / OPERATIONS
+  async createWorkSession(data) {
+    return this.request('/work-sessions', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async getWorkSessions(filters = {}) {
+    const params = new URLSearchParams(filters);
+    return this.request(`/work-sessions?${params}`);
+  }
+
+  async getWorkSession(sessionId) {
+    return this.request(`/work-sessions/${sessionId}`);
+  }
+
+  async updateWorkSession(sessionId, data) {
+    return this.request(`/work-sessions/${sessionId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async deleteWorkSession(sessionId) {
+    return this.request(`/work-sessions/${sessionId}`, {
+      method: 'DELETE',
     });
   }
 

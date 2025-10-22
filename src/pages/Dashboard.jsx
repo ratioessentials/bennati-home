@@ -30,7 +30,7 @@ export default function Dashboard() {
 
   const { data: operators = [] } = useQuery({
     queryKey: ['operators'],
-    queryFn: () => apiClient.getUsers({ role: 'user' }),
+    queryFn: () => apiClient.getUsers({ role: 'operator' }),
   });
 
   const { data: completions = [] } = useQuery({
@@ -43,14 +43,10 @@ export default function Dashboard() {
     queryFn: () => apiClient.getSupplyAlerts({ resolved: false }),
   });
 
-  const { data: allChecklists = [] } = useQuery({
-    queryKey: ['all-checklists'],
-    queryFn: () => apiClient.getChecklistItems({ active: true }),
-  });
-
-  // Calcola statistiche
+  // Calcola statistiche - conta solo completions con work_session_id (operazioni valide)
   const totalCompletionsToday = completions.filter(c => {
-    const completionDate = new Date(c.completion_date);
+    if (!c.work_session_id) return false; // Escludi completions senza work session
+    const completionDate = new Date(c.completed_at);
     const today = new Date();
     return completionDate.toDateString() === today.toDateString();
   }).length;
@@ -59,7 +55,7 @@ export default function Dashboard() {
     const aptCompletions = completions.filter(c => c.apartment_id === apt.id);
     if (aptCompletions.length === 0) return false;
     
-    const lastCleaning = new Date(aptCompletions[0].completion_date);
+    const lastCleaning = new Date(aptCompletions[0].completed_at);
     const daysSince = Math.floor((new Date() - lastCleaning) / (1000 * 60 * 60 * 24));
     return daysSince <= 7;
   }).length;
@@ -73,21 +69,7 @@ export default function Dashboard() {
     const aptCompletions = completions.filter(c => c.apartment_id === apartmentId);
     if (aptCompletions.length === 0) return null;
     
-    return new Date(aptCompletions[0].completion_date);
-  };
-
-  const getCompletionPercentage = (apartmentId) => {
-    const aptChecklists = allChecklists.filter(c => c.apartment_id === apartmentId);
-    if (aptChecklists.length === 0) return 0;
-    
-    const aptCompletions = completions.filter(c => c.apartment_id === apartmentId);
-    const completedToday = aptCompletions.filter(c => {
-      const completionDate = new Date(c.completion_date);
-      const today = new Date();
-      return completionDate.toDateString() === today.toDateString();
-    }).length;
-    
-    return Math.round((completedToday / aptChecklists.length) * 100);
+    return new Date(aptCompletions[0].completed_at);
   };
 
   const getApartmentAlerts = (apartmentId) => {
@@ -210,8 +192,8 @@ export default function Dashboard() {
           </div>
 
           {loadingApartments ? (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Array(6).fill(0).map((_, i) => (
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {Array(8).fill(0).map((_, i) => (
                 <Skeleton key={i} className="h-48 w-full" />
               ))}
             </div>
@@ -226,13 +208,12 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {apartments.slice(0, 6).map((apartment) => {
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {apartments.slice(0, 8).map((apartment) => {
                 const lastCleaning = getLastCleaning(apartment.id);
                 const daysSinceCleaning = lastCleaning 
                   ? Math.floor((new Date() - lastCleaning) / (1000 * 60 * 60 * 24))
                   : null;
-                const completionPerc = getCompletionPercentage(apartment.id);
                 const alerts = getApartmentAlerts(apartment.id);
 
                 return (
@@ -267,21 +248,6 @@ export default function Dashboard() {
                             <span className="text-sm text-gray-400">
                               Nessuna pulizia registrata
                             </span>
-                          </div>
-                        )}
-
-                        {completionPerc > 0 && (
-                          <div>
-                            <div className="flex justify-between items-center mb-2">
-                              <span className="text-sm text-gray-600">Progresso oggi</span>
-                              <span className="text-sm font-bold text-teal-600">{completionPerc}%</span>
-                            </div>
-                            <div className="bg-gray-200 rounded-full h-2 overflow-hidden">
-                              <div 
-                                className="bg-gradient-to-r from-teal-500 to-cyan-600 h-full transition-all duration-500"
-                                style={{ width: `${completionPerc}%` }}
-                              />
-                            </div>
                           </div>
                         )}
                       </CardContent>

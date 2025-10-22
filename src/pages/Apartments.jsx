@@ -32,7 +32,6 @@ import {
   ClipboardList,
   Package,
   DoorOpen,
-  Calendar,
   AlertTriangle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -86,12 +85,6 @@ export default function Apartments() {
   const { data: allSupplies } = useQuery({
     queryKey: ['supplies'],
     queryFn: () => apiClient.getSupplies(),
-    initialData: [],
-  });
-
-  const { data: completions } = useQuery({
-    queryKey: ['completions'],
-    queryFn: () => apiClient.getCompletions(),
     initialData: [],
   });
 
@@ -258,12 +251,6 @@ export default function Apartments() {
     return allSupplies.filter(s => s.apartment_id === apartmentId).length;
   };
 
-  const getLastCleaning = (apartmentId) => {
-    const aptCompletions = completions.filter(c => c.apartment_id === apartmentId);
-    if (aptCompletions.length === 0) return null;
-    return new Date(aptCompletions[0].completion_date);
-  };
-
   const getApartmentAlerts = (apartmentId) => {
     return supplyAlerts.filter(a => a.apartment_id === apartmentId).length;
   };
@@ -362,10 +349,6 @@ export default function Apartments() {
             </Card>
           ) : (
             filteredApartments.map((apartment) => {
-              const lastCleaning = getLastCleaning(apartment.id);
-              const daysSinceCleaning = lastCleaning 
-                ? Math.floor((new Date() - lastCleaning) / (1000 * 60 * 60 * 24))
-                : null;
               const alerts = getApartmentAlerts(apartment.id);
 
               return (
@@ -405,20 +388,6 @@ export default function Apartments() {
                           {getPropertyName(apartment.property_id)}
                         </span>
                       </div>
-
-                      {lastCleaning ? (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="w-4 h-4 text-gray-500" />
-                          <span className="text-gray-600">
-                            Ultima pulizia: {daysSinceCleaning === 0 ? 'Oggi' : `${daysSinceCleaning}gg fa`}
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 text-sm">
-                          <Calendar className="w-4 h-4 text-gray-400" />
-                          <span className="text-gray-400">Nessuna pulizia</span>
-                        </div>
-                      )}
 
                       <div className="grid grid-cols-3 gap-2 text-center text-sm">
                         <div className="bg-blue-50 p-2 rounded">
@@ -831,21 +800,21 @@ function RoomsManager({ apartmentId, rooms, queryClient }) {
 // Componente per gestire la checklist
 function ChecklistManager({ apartmentId, rooms, checklists, queryClient }) {
   const [newChecklist, setNewChecklist] = useState({
+    title: "",
     description: "",
-    room_id: "",
-    category: "pulizia"
+    room_id: null,
+    is_mandatory: false
   });
   
   const addChecklistMutation = useMutation({
     mutationFn: (data) => apiClient.createChecklistItem({
       ...data,
       apartment_id: apartmentId,
-      active: true,
       order: checklists.length
     }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['checklists'] });
-      setNewChecklist({ description: "", room_id: "", category: "pulizia" });
+      setNewChecklist({ title: "", description: "", room_id: null, is_mandatory: false });
     },
   });
 
@@ -862,28 +831,26 @@ function ChecklistManager({ apartmentId, rooms, checklists, queryClient }) {
     return room?.name || "N/A";
   };
 
-  const categoryColors = {
-    pulizia: "bg-teal-100 text-teal-700",
-    controllo: "bg-blue-100 text-blue-700",
-    riordino: "bg-purple-100 text-purple-700",
-    altro: "bg-gray-100 text-gray-700"
-  };
-
   return (
     <div className="space-y-4">
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h4 className="font-semibold mb-3">Aggiungi Attività alla Checklist</h4>
         <div className="space-y-3">
+          <Input
+            placeholder="Titolo attività (es: Pulizia Sanitari)"
+            value={newChecklist.title}
+            onChange={(e) => setNewChecklist({ ...newChecklist, title: e.target.value })}
+          />
           <Textarea
-            placeholder="Descrizione attività (es: Pulire i sanitari)"
+            placeholder="Descrizione (opzionale)"
             value={newChecklist.description}
             onChange={(e) => setNewChecklist({ ...newChecklist, description: e.target.value })}
             rows={2}
           />
           <div className="flex gap-3">
             <Select
-              value={newChecklist.room_id}
-              onValueChange={(value) => setNewChecklist({ ...newChecklist, room_id: value })}
+              value={newChecklist.room_id || ""}
+              onValueChange={(value) => setNewChecklist({ ...newChecklist, room_id: value ? parseInt(value) : null })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Stanza (opzionale)" />
@@ -897,27 +864,13 @@ function ChecklistManager({ apartmentId, rooms, checklists, queryClient }) {
                 ))}
               </SelectContent>
             </Select>
-            <Select
-              value={newChecklist.category}
-              onValueChange={(value) => setNewChecklist({ ...newChecklist, category: value })}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pulizia">Pulizia</SelectItem>
-                <SelectItem value="controllo">Controllo</SelectItem>
-                <SelectItem value="riordino">Riordino</SelectItem>
-                <SelectItem value="altro">Altro</SelectItem>
-              </SelectContent>
-            </Select>
             <Button
               onClick={() => {
-                if (newChecklist.description) {
+                if (newChecklist.title) {
                   addChecklistMutation.mutate(newChecklist);
                 }
               }}
-              disabled={!newChecklist.description || addChecklistMutation.isPending}
+              disabled={!newChecklist.title || addChecklistMutation.isPending}
             >
               <Plus className="w-4 h-4 mr-1" />
               Aggiungi
@@ -938,14 +891,18 @@ function ChecklistManager({ apartmentId, rooms, checklists, queryClient }) {
               <CardContent className="p-4">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
-                    <p className="font-medium mb-2">{item.description}</p>
+                    <p className="font-medium mb-2">{item.title}</p>
+                    {item.description && (
+                      <p className="text-sm text-gray-600 mb-2">{item.description}</p>
+                    )}
                     <div className="flex flex-wrap gap-2">
-                      <Badge className={categoryColors[item.category]}>
-                        {item.category}
-                      </Badge>
+                      {item.is_mandatory && (
+                        <Badge className="bg-red-100 text-red-700">Obbligatoria</Badge>
+                      )}
                       <Badge variant="outline">
                         {getRoomName(item.room_id)}
                       </Badge>
+                      <Badge variant="outline">Ordine: {item.order}</Badge>
                     </div>
                   </div>
                   <Button

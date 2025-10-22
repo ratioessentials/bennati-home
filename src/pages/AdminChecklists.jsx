@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
@@ -32,12 +33,12 @@ export default function AdminChecklists() {
   const [selectedProperty, setSelectedProperty] = useState("all");
   const [selectedApartment, setSelectedApartment] = useState("all");
   const [formData, setFormData] = useState({
-    apartment_id: "",
-    room_id: "",
+    apartment_id: null,
+    room_id: null,
+    title: "",
     description: "",
-    category: "pulizia",
-    order: 0,
-    active: true
+    is_mandatory: false,
+    order: 0
   });
 
   const { data: properties } = useQuery({
@@ -91,12 +92,12 @@ export default function AdminChecklists() {
 
   const resetForm = () => {
     setFormData({
-      apartment_id: "",
-      room_id: "",
+      apartment_id: null,
+      room_id: null,
+      title: "",
       description: "",
-      category: "pulizia",
-      order: 0,
-      active: true
+      is_mandatory: false,
+      order: 0
     });
     setEditingItem(null);
   };
@@ -140,12 +141,6 @@ export default function AdminChecklists() {
     return true;
   });
 
-  const categoryColors = {
-    pulizia: "bg-teal-100 text-teal-700",
-    controllo: "bg-blue-100 text-blue-700",
-    riordino: "bg-purple-100 text-purple-700",
-    altro: "bg-gray-100 text-gray-700"
-  };
 
   return (
     <div className="p-6 md:p-8">
@@ -269,14 +264,15 @@ export default function AdminChecklists() {
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-2">
-                        <Badge className={categoryColors[item.category]}>
-                          {item.category}
-                        </Badge>
-                        {!item.active && (
-                          <Badge variant="secondary">Non Attiva</Badge>
+                        {item.is_mandatory && (
+                          <Badge className="bg-red-100 text-red-700">Obbligatoria</Badge>
                         )}
+                        <Badge variant="outline">Ordine: {item.order}</Badge>
                       </div>
-                      <p className="text-gray-900 font-medium mb-2">{item.description}</p>
+                      <p className="text-gray-900 font-medium mb-2">{item.title}</p>
+                      {item.description && (
+                        <p className="text-gray-600 text-sm mb-2">{item.description}</p>
+                      )}
                       <div className="flex flex-wrap gap-3 text-sm text-gray-600">
                         <div className="flex items-center gap-1">
                           <Home className="w-4 h-4 text-teal-600" />
@@ -328,8 +324,8 @@ export default function AdminChecklists() {
               <div>
                 <Label htmlFor="apartment_id">Appartamento *</Label>
                 <Select
-                  value={formData.apartment_id}
-                  onValueChange={(value) => setFormData({ ...formData, apartment_id: value, room_id: "" })}
+                  value={formData.apartment_id || ""}
+                  onValueChange={(value) => setFormData({ ...formData, apartment_id: parseInt(value), room_id: null })}
                   required
                 >
                   <SelectTrigger>
@@ -348,7 +344,7 @@ export default function AdminChecklists() {
                 <Label htmlFor="room_id">Stanza (opzionale)</Label>
                 <Select
                   value={formData.room_id || ""}
-                  onValueChange={(value) => setFormData({ ...formData, room_id: value })}
+                  onValueChange={(value) => setFormData({ ...formData, room_id: value ? parseInt(value) : null })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Generale (tutte le stanze)" />
@@ -366,32 +362,32 @@ export default function AdminChecklists() {
                 </Select>
               </div>
               <div>
-                <Label htmlFor="description">Descrizione Attività *</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="es: Pulire i sanitari, Passare l'aspirapolvere"
-                  rows={3}
+                <Label htmlFor="title">Titolo Attività *</Label>
+                <Input
+                  id="title"
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="es: Pulizia Sanitari"
                   required
                 />
               </div>
               <div>
-                <Label htmlFor="category">Categoria</Label>
-                <Select
-                  value={formData.category}
-                  onValueChange={(value) => setFormData({ ...formData, category: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="pulizia">Pulizia</SelectItem>
-                    <SelectItem value="controllo">Controllo</SelectItem>
-                    <SelectItem value="riordino">Riordino</SelectItem>
-                    <SelectItem value="altro">Altro</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="description">Descrizione (opzionale)</Label>
+                <Textarea
+                  id="description"
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="es: Pulire accuratamente tutti i sanitari del bagno"
+                  rows={3}
+                />
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="is_mandatory"
+                  checked={formData.is_mandatory}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_mandatory: checked })}
+                />
+                <Label htmlFor="is_mandatory">Attività obbligatoria</Label>
               </div>
               <div>
                 <Label htmlFor="order">Ordine</Label>

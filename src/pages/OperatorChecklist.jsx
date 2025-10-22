@@ -28,7 +28,7 @@ export default function OperatorChecklist() {
   const [selectedApartment, setSelectedApartment] = useState("");
 
   React.useEffect(() => {
-    apiClient.auth.me().then(setUser).catch(() => {});
+    apiClient.getCurrentUser().then(setUser).catch(() => {});
   }, []);
 
   const { data: properties } = useQuery({
@@ -58,11 +58,12 @@ export default function OperatorChecklist() {
   const { data: completions } = useQuery({
     queryKey: ['completions', selectedApartment, user?.id],
     queryFn: async () => {
-      if (!selectedApartment || !user) return [];
+      const apartmentId = parseInt(selectedApartment);
+      if (!apartmentId || isNaN(apartmentId) || !user) return [];
       const today = new Date().toISOString().split('T')[0];
       return apiClient.getCompletions({
-        apartment_id: selectedApartment,
-        operator_id: user.id
+        apartment_id: apartmentId,
+        user_id: user.id // Corretto da operator_id a user_id
       });
     },
     initialData: [],
@@ -140,14 +141,17 @@ export default function OperatorChecklist() {
                   <SelectValue placeholder="Seleziona struttura" />
                 </SelectTrigger>
                 <SelectContent>
-                  {properties.map((property) => (
-                    <SelectItem key={property.id} value={property.id}>
-                      <div className="flex items-center gap-2">
-                        <Building2 className="w-4 h-4" />
-                        {property.name}
-                      </div>
-                    </SelectItem>
-                  ))}
+                  {properties.map((property) => {
+                    const propertyId = `${property.id}`;
+                    return (
+                      <SelectItem key={property.id} value={propertyId}>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4" />
+                          {property.name}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
                 </SelectContent>
               </Select>
             </div>
@@ -163,14 +167,17 @@ export default function OperatorChecklist() {
                     <SelectValue placeholder="Seleziona appartamento" />
                   </SelectTrigger>
                   <SelectContent>
-                    {apartments.map((apt) => (
-                      <SelectItem key={apt.id} value={apt.id}>
-                        <div className="flex items-center gap-2">
-                          <Home className="w-4 h-4" />
-                          {apt.name}
-                        </div>
-                      </SelectItem>
-                    ))}
+                    {apartments.map((apt) => {
+                      const apartmentId = `${apt.id}`;
+                      return (
+                        <SelectItem key={apt.id} value={apartmentId}>
+                          <div className="flex items-center gap-2">
+                            <Home className="w-4 h-4" />
+                            {apt.name}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>

@@ -12,12 +12,14 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     password: str
+    phone: Optional[str] = None
 
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
     name: Optional[str] = None
     role: Optional[str] = None
+    password: Optional[str] = None
 
 
 class UserInvite(BaseModel):
@@ -156,10 +158,38 @@ class ChecklistItem(ChecklistItemBase):
         from_attributes = True
 
 
+# WorkSession Schemas
+class WorkSessionBase(BaseModel):
+    user_id: int
+    apartment_id: int
+    notes: Optional[str] = None
+
+
+class WorkSessionCreate(BaseModel):
+    apartment_id: int
+    notes: Optional[str] = None
+
+
+class WorkSessionUpdate(BaseModel):
+    notes: Optional[str] = None
+    end_time: Optional[datetime] = None
+
+
+class WorkSession(WorkSessionBase):
+    id: int
+    start_time: datetime
+    end_time: Optional[datetime] = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 # ChecklistCompletion Schemas
 class ChecklistCompletionBase(BaseModel):
     checklist_item_id: int
     user_id: int
+    work_session_id: Optional[int] = None
     notes: Optional[str] = None
 
 
@@ -170,6 +200,8 @@ class ChecklistCompletionCreate(ChecklistCompletionBase):
 class ChecklistCompletion(ChecklistCompletionBase):
     id: int
     completed_at: datetime
+    apartment_id: Optional[int] = None  # Viene popolato dal router tramite join
+    checklist_item_title: Optional[str] = None  # Titolo della checklist item
 
     class Config:
         from_attributes = True

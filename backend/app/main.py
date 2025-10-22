@@ -12,7 +12,8 @@ from .routers import (
     supplies,
     supply_alerts,
     users,
-    email
+    email,
+    work_sessions
 )
 
 # Crea le tabelle nel database
@@ -44,6 +45,7 @@ app.include_router(supplies.router, prefix="/api")
 app.include_router(supply_alerts.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(email.router, prefix="/api")
+app.include_router(work_sessions.router, prefix="/api")
 
 
 @app.get("/")
