@@ -11,7 +11,7 @@ router = APIRouter(prefix="/completions", tags=["completions"])
 def get_completions(
     checklist_item_id: Optional[int] = Query(None),
     user_id: Optional[int] = Query(None),
-    apartment_id: Optional[int] = Query(None),
+    work_session_id: Optional[int] = Query(None),
     limit: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.get_current_user)
@@ -24,25 +24,30 @@ def get_completions(
     if user_id is not None:
         query = query.filter(models.ChecklistCompletion.user_id == user_id)
     
-    if apartment_id is not None:
-        query = query.filter(models.ChecklistItem.apartment_id == apartment_id)
+    if work_session_id is not None:
+        query = query.filter(models.ChecklistCompletion.work_session_id == work_session_id)
     
     completions = query.order_by(models.ChecklistCompletion.completed_at.desc())
     
     if limit is not None:
         completions = completions.limit(limit)
     
-    # Restituisci i dati con apartment_id e work_session_id
+    # Restituisci i dati con work_session_id
     results = []
     for completion in completions.all():
+        # Ottieni apartment_id tramite work_session
+        apartment_id = None
+        if completion.work_session:
+            apartment_id = completion.work_session.apartment_id
+        
         results.append({
             "id": completion.id,
             "checklist_item_id": completion.checklist_item_id,
             "user_id": completion.user_id,
-            "work_session_id": completion.work_session_id,  # AGGIUNTO!
+            "work_session_id": completion.work_session_id,
             "completed_at": completion.completed_at.isoformat() if completion.completed_at else None,
             "notes": completion.notes,
-            "apartment_id": completion.checklist_item.apartment_id if completion.checklist_item else None,
+            "apartment_id": apartment_id,
             "checklist_item_title": completion.checklist_item.title if completion.checklist_item else None
         })
     

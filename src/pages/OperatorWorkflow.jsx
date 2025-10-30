@@ -57,39 +57,29 @@ export default function OperatorWorkflow() {
     enabled: !!selectedProperty,
   });
 
-  const { data: checklistItems } = useQuery({
-    queryKey: ['checklist-items', selectedApartment],
+  const { data: apartmentChecklists } = useQuery({
+    queryKey: ['apartment-checklists', selectedApartment],
     queryFn: () => {
       const apartmentValue = typeof selectedApartment === 'object' ? null : selectedApartment;
       const apartmentId = parseInt(apartmentValue);
       return apartmentValue && !isNaN(apartmentId)
-        ? apiClient.getChecklistItems({ apartment_id: apartmentId, active: true }, 'order')
+        ? apiClient.getApartmentChecklists(apartmentId)
         : Promise.resolve([]);
     },
     initialData: [],
     enabled: !!selectedApartment && typeof selectedApartment !== 'object' && !isNaN(parseInt(selectedApartment)),
   });
 
-  const { data: rooms } = useQuery({
-    queryKey: ['rooms', selectedApartment],
-    queryFn: () => {
-      const apartmentValue = typeof selectedApartment === 'object' ? null : selectedApartment;
-      const apartmentId = parseInt(apartmentValue);
-      return apartmentValue && !isNaN(apartmentId)
-        ? apiClient.getRooms(apartmentId)  // PASSA IL VALORE DIRETTO, NON UN OGGETTO
-        : Promise.resolve([]);
-    },
-    initialData: [],
-    enabled: !!selectedApartment && typeof selectedApartment !== 'object' && !isNaN(parseInt(selectedApartment)),
-  });
+  // Estrai le checklist items dalle assegnazioni
+  const checklistItems = apartmentChecklists.map(ac => ac.checklist_item).filter(Boolean);
 
-  const { data: supplies } = useQuery({
-    queryKey: ['supplies', selectedApartment],
+  const { data: apartmentSupplies } = useQuery({
+    queryKey: ['apartment-supplies', selectedApartment],
     queryFn: () => {
       const apartmentValue = typeof selectedApartment === 'object' ? null : selectedApartment;
       const apartmentId = parseInt(apartmentValue);
       return apartmentValue && !isNaN(apartmentId)
-        ? apiClient.getSupplies({ apartment_id: apartmentId })
+        ? apiClient.getApartmentSupplies(apartmentId)
         : Promise.resolve([]);
     },
     initialData: [],
@@ -101,11 +91,10 @@ export default function OperatorWorkflow() {
     queryFn: async () => {
       if (!workSessionId) return [];
       console.log('🔄 Fetching completions for session:', workSessionId);
-      // Filtra solo le completions della sessione corrente
-      const allCompletions = await apiClient.getCompletions({
-        user_id: user.id
+      // Filtra lato server per work_session_id
+      const filtered = await apiClient.getCompletions({
+        work_session_id: workSessionId
       });
-      const filtered = allCompletions.filter(c => c.work_session_id === workSessionId);
       console.log('📦 Completions fetched:', filtered.length, filtered);
       return filtered;
     },
@@ -121,7 +110,7 @@ export default function OperatorWorkflow() {
       workSessionId: workSessionId,
       currentStep: currentStep,
       selectedApartment: selectedApartment,
-      checklistItemsCount: checklistItems?.length || 0,
+      checklistsCount: checklistItems?.length || 0,
       completionsCount: completions?.length || 0
     });
   }, [user, workSessionId, currentStep, selectedApartment, checklistItems, completions]);
@@ -173,22 +162,13 @@ export default function OperatorWorkflow() {
   });
 
   const updateSupplyMutation = useMutation({
-    mutationFn: async ({ supplyId, newQuantity }) => {
-      await apiClient.updateSupply(supplyId, { current_quantity: newQuantity });
-      
-      const supply = supplies.find(s => s.id === supplyId);
-      if (newQuantity <= supply.min_quantity) {
-        await apiClient.createSupplyAlert({
-          supply_id: supplyId,
-          apartment_id: parseInt(selectedApartment),
-          user_id: user.id,
-          alert_type: newQuantity === 0 ? 'terminato' : 'in_esaurimento',
-          resolved: false
-        });
-      }
+    mutationFn: async ({ apartmentSupplyId, newQuantity }) => {
+      await apiClient.updateApartmentSupply(apartmentSupplyId, { 
+        required_quantity: newQuantity 
+      });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['supplies'] });
+      queryClient.invalidateQueries({ queryKey: ['apartment-supplies'] });
     },
   });
 
@@ -198,14 +178,14 @@ export default function OperatorWorkflow() {
       const updates = Object.entries(supplyUpdates);
       
       if (updates.length > 0) {
-        for (const [supplyId, newQuantity] of updates) {
+        for (const [apartmentSupplyId, newQuantity] of updates) {
           try {
             await updateSupplyMutation.mutateAsync({ 
-              supplyId: parseInt(supplyId), 
+              apartmentSupplyId: parseInt(apartmentSupplyId), 
               newQuantity: parseInt(newQuantity) 
             });
           } catch (error) {
-            console.error(`Errore aggiornamento scorta ${supplyId}:`, error);
+            console.error(`Errore aggiornamento scorta ${apartmentSupplyId}:`, error);
           }
         }
       }
@@ -221,7 +201,12 @@ export default function OperatorWorkflow() {
       return true;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries(['work-sessions']);
+      // Invalida tutte le query relative a scorte e sessioni per aggiornare l'area admin
+      queryClient.invalidateQueries({ queryKey: ['work-sessions'] });
+      queryClient.invalidateQueries({ queryKey: ['apartment-supplies'] });
+      queryClient.invalidateQueries({ queryKey: ['all-apartment-supplies'] });
+      queryClient.invalidateQueries({ queryKey: ['all-apartment-supply-items'] });
+      queryClient.invalidateQueries({ queryKey: ['supplies'] });
       setCurrentStep(5); // Step finale di ringraziamento
     },
     onError: (error) => {
@@ -246,17 +231,19 @@ export default function OperatorWorkflow() {
   const totalChecklistItems = checklistItems.length;
   const checklistProgress = totalChecklistItems > 0 ? (completedCount / totalChecklistItems) * 100 : 0;
 
-  const handleSupplyUpdate = (supplyId, value) => {
-    setSupplyUpdates({ ...supplyUpdates, [supplyId]: value });
+  const handleSupplyUpdate = (apartmentSupplyId, value) => {
+    setSupplyUpdates({ ...supplyUpdates, [apartmentSupplyId]: value });
   };
 
-  const getSupplyQuantity = (supply) => {
-    return supplyUpdates[supply.id] !== undefined ? supplyUpdates[supply.id] : supply.current_quantity;
+  const getSupplyQuantity = (apartmentSupply) => {
+    return supplyUpdates[apartmentSupply.id] !== undefined 
+      ? supplyUpdates[apartmentSupply.id] 
+      : apartmentSupply.required_quantity;
   };
 
-  const isLowStock = (supply) => {
-    const qty = getSupplyQuantity(supply);
-    return qty <= supply.min_quantity;
+  const isLowStock = (apartmentSupply) => {
+    const qty = getSupplyQuantity(apartmentSupply);
+    return qty <= apartmentSupply.min_quantity;
   };
 
   const categoryColors = {
@@ -267,11 +254,11 @@ export default function OperatorWorkflow() {
   };
 
   const supplyCategoryColors = {
-    pulizia: "bg-teal-100 text-teal-700",
-    igiene: "bg-blue-100 text-blue-700",
-    cucina: "bg-orange-100 text-orange-700",
-    bagno: "bg-purple-100 text-purple-700",
-    altro: "bg-gray-100 text-gray-700"
+    bagno: "bg-blue-100 text-blue-700",
+    "camera da letto": "bg-purple-100 text-purple-700",
+    salotto: "bg-teal-100 text-teal-700",
+    ingresso: "bg-orange-100 text-orange-700",
+    generale: "bg-gray-100 text-gray-700"
   };
 
   const getSelectedApartmentName = () => {
@@ -289,7 +276,7 @@ export default function OperatorWorkflow() {
 
   const canProceedToStep2 = selectedProperty && selectedApartment && checklistItems.length > 0;
   const canProceedToStep3 = completedCount === totalChecklistItems && totalChecklistItems > 0;
-  const canProceedToStep4 = supplies.length > 0;
+  const canProceedToStep4 = apartmentSupplies.length > 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-teal-50 to-cyan-50 pb-20">
@@ -432,28 +419,21 @@ export default function OperatorWorkflow() {
 
             <div className="space-y-6">
               {(() => {
-                // Raggruppa checklist per stanza
+                // Raggruppa checklist per stanza (room_name)
                 const itemsByRoom = checklistItems.reduce((acc, item) => {
-                  const roomId = item.room_id || 'no_room';
-                  if (!acc[roomId]) acc[roomId] = [];
-                  acc[roomId].push(item);
+                  const roomName = item.room_name || 'generale';
+                  if (!acc[roomName]) acc[roomName] = [];
+                  acc[roomName].push(item);
                   return acc;
                 }, {});
 
-                // Funzione per ottenere il nome della stanza
-                const getRoomName = (roomId) => {
-                  if (roomId === 'no_room') return 'Generale';
-                  const room = rooms.find(r => r.id === roomId);
-                  return room?.name || 'Stanza Sconosciuta';
-                };
-
-                return Object.entries(itemsByRoom).map(([roomId, items]) => (
-                  <div key={roomId} className="space-y-3">
+                return Object.entries(itemsByRoom).map(([roomName, items]) => (
+                  <div key={roomName} className="space-y-3">
                     {/* Intestazione Stanza */}
                     <div className="sticky top-36 z-30 bg-gradient-to-r from-cyan-50 to-teal-50 rounded-lg p-3 shadow-md border-l-4 border-teal-500">
                       <div className="flex items-center gap-2">
                         <Home className="w-5 h-5 text-teal-600" />
-                        <h3 className="font-bold text-lg text-gray-800">{getRoomName(parseInt(roomId))}</h3>
+                        <h3 className="font-bold text-lg text-gray-800 capitalize">{roomName}</h3>
                         <Badge className="bg-teal-100 text-teal-700 ml-auto">
                           {items.filter(item => isCompleted(item.id)).length}/{items.length}
                         </Badge>
@@ -489,13 +469,6 @@ export default function OperatorWorkflow() {
                                 )}
                               </button>
                               <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                  {item.is_mandatory && (
-                                    <Badge className="bg-orange-100 text-orange-700 text-xs">
-                                      Obbligatoria
-                                    </Badge>
-                                  )}
-                                </div>
                                 <p className={`text-lg font-bold mb-1 ${
                                   completed ? 'line-through text-gray-500' : 'text-gray-900'
                                 }`}>
@@ -559,20 +532,21 @@ export default function OperatorWorkflow() {
                     <p className="text-orange-100 text-sm mt-1">Aggiorna le quantità dei prodotti</p>
                   </div>
                   <Badge className="bg-white text-orange-600 text-lg px-4 py-2">
-                    {supplies.length} prodotti
+                    {apartmentSupplies.length} prodotti
                   </Badge>
                 </div>
               </CardContent>
             </Card>
 
             <div className="space-y-3">
-              {supplies.map((supply) => {
-                const currentQty = getSupplyQuantity(supply);
-                const isLow = currentQty <= supply.min_quantity;
+              {apartmentSupplies.map((apartmentSupply) => {
+                const supply = apartmentSupply.supply;
+                const currentQty = getSupplyQuantity(apartmentSupply);
+                const isLow = currentQty <= apartmentSupply.min_quantity;
                 
                 return (
                   <Card
-                    key={supply.id}
+                    key={apartmentSupply.id}
                     className={`border-none shadow-lg ${
                       isLow ? 'border-2 border-orange-400 bg-orange-50' : ''
                     }`}
@@ -597,42 +571,39 @@ export default function OperatorWorkflow() {
                         </div>
 
                         <div className="bg-gray-50 rounded-lg p-4">
-                          <Label htmlFor={`qty-${supply.id}`} className="text-sm font-medium mb-2 block">
-                            Quantità Attuale
+                          <Label htmlFor={`qty-${apartmentSupply.id}`} className="text-sm font-medium mb-2 block">
+                            Quantità Disponibile
                           </Label>
                           <div className="flex items-center gap-3">
                             <Button
                               type="button"
                               variant="outline"
                               size="lg"
-                              onClick={() => handleSupplyUpdate(supply.id, Math.max(0, currentQty - 1))}
+                              onClick={() => handleSupplyUpdate(apartmentSupply.id, Math.max(0, currentQty - 1))}
                               className="h-12 w-12 text-xl font-bold"
                             >
                               -
                             </Button>
-                            <Input
-                              id={`qty-${supply.id}`}
-                              type="number"
-                              min="0"
-                              value={currentQty}
-                              onChange={(e) => handleSupplyUpdate(supply.id, e.target.value)}
-                              className="h-12 text-center text-2xl font-bold"
-                            />
+                            <div className="flex-1 text-center">
+                              <div className="text-3xl font-bold text-gray-900">
+                                {currentQty}
+                              </div>
+                              <div className="text-sm text-gray-500">
+                                {supply.unit}
+                              </div>
+                            </div>
                             <Button
                               type="button"
                               variant="outline"
                               size="lg"
-                              onClick={() => handleSupplyUpdate(supply.id, parseInt(currentQty) + 1)}
+                              onClick={() => handleSupplyUpdate(apartmentSupply.id, parseInt(currentQty) + 1)}
                               className="h-12 w-12 text-xl font-bold"
                             >
                               +
                             </Button>
-                            <span className="text-lg font-medium text-gray-600 ml-2">
-                              {supply.unit}
-                            </span>
                           </div>
-                          <p className="text-xs text-gray-500 mt-2">
-                            Minimo richiesto: {supply.min_quantity} {supply.unit}
+                          <p className="text-xs text-gray-500 mt-2 text-center">
+                            Minimo richiesto: {apartmentSupply.min_quantity} {supply.unit}
                           </p>
                         </div>
                       </div>
@@ -700,7 +671,7 @@ export default function OperatorWorkflow() {
                   <h3 className="font-semibold text-teal-900 mb-2">Riepilogo Operazione:</h3>
                   <ul className="space-y-1 text-sm text-teal-800">
                     <li>✓ Checklist completata: {completedCount}/{totalChecklistItems} attività</li>
-                    <li>✓ Scorte verificate: {supplies.length} prodotti</li>
+                    <li>✓ Scorte verificate: {apartmentSupplies.length} prodotti</li>
                     <li>✓ Appartamento: {getSelectedApartmentName()}</li>
                   </ul>
                 </div>

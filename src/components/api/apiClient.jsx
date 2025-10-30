@@ -223,6 +223,24 @@ class ApiClient {
     });
   }
 
+  // APARTMENT CHECKLIST ITEMS (Assegnazioni)
+  async getApartmentChecklists(apartmentId) {
+    return this.request(`/checklist-items/apartment/${apartmentId}/checklist-items`);
+  }
+
+  async addChecklistToApartment(apartmentId, data) {
+    return this.request(`/checklist-items/apartment/${apartmentId}/checklist-items`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeChecklistFromApartment(apartmentChecklistItemId) {
+    return this.request(`/checklist-items/apartment-checklist-items/${apartmentChecklistItemId}`, {
+      method: 'DELETE',
+    });
+  }
+
   // CHECKLIST COMPLETIONS
   async getCompletions(filters = {}) {
     const params = new URLSearchParams(filters);
@@ -242,10 +260,14 @@ class ApiClient {
     });
   }
 
-  // SUPPLIES
+  // SUPPLIES (Scorte Globali)
   async getSupplies(filters = {}) {
     const params = new URLSearchParams(filters);
     return this.request(`/supplies?${params}`);
+  }
+
+  async getSupply(id) {
+    return this.request(`/supplies/${id}`);
   }
 
   async createSupply(data) {
@@ -264,6 +286,31 @@ class ApiClient {
 
   async deleteSupply(id) {
     return this.request(`/supplies/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  // APARTMENT SUPPLIES (Assegnazioni Scorte ad Appartamenti)
+  async getApartmentSupplies(apartmentId) {
+    return this.request(`/supplies/apartment/${apartmentId}/supplies`);
+  }
+
+  async addSupplyToApartment(apartmentId, data) {
+    return this.request(`/supplies/apartment/${apartmentId}/supplies`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async updateApartmentSupply(apartmentSupplyId, data) {
+    return this.request(`/supplies/apartment-supplies/${apartmentSupplyId}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async removeSupplyFromApartment(apartmentSupplyId) {
+    return this.request(`/supplies/apartment-supplies/${apartmentSupplyId}`, {
       method: 'DELETE',
     });
   }

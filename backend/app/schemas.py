@@ -127,12 +127,11 @@ class Room(RoomBase):
         from_attributes = True
 
 
-# ChecklistItem Schemas
+# ChecklistItem Schemas (Globali)
 class ChecklistItemBase(BaseModel):
     title: str
     description: Optional[str] = None
-    apartment_id: int
-    room_id: Optional[int] = None
+    room_name: Optional[str] = None
     is_mandatory: bool = False
     order: int = 0
 
@@ -144,8 +143,7 @@ class ChecklistItemCreate(ChecklistItemBase):
 class ChecklistItemUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    apartment_id: Optional[int] = None
-    room_id: Optional[int] = None
+    room_name: Optional[str] = None
     is_mandatory: Optional[bool] = None
     order: Optional[int] = None
 
@@ -156,6 +154,34 @@ class ChecklistItem(ChecklistItemBase):
 
     class Config:
         from_attributes = True
+
+
+# ApartmentChecklistItem Schemas (Collegamento Appartamento-Checklist)
+class ApartmentChecklistItemBase(BaseModel):
+    apartment_id: int
+    checklist_item_id: int
+
+
+class ApartmentChecklistItemCreate(ApartmentChecklistItemBase):
+    pass
+
+
+class ApartmentChecklistItemUpdate(BaseModel):
+    pass  # Per ora non ci sono campi modificabili
+
+
+class ApartmentChecklistItem(ApartmentChecklistItemBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Schema esteso con dettagli della checklist globale
+class ApartmentChecklistItemWithDetails(ApartmentChecklistItem):
+    checklist_item: ChecklistItem
 
 
 # WorkSession Schemas
@@ -207,14 +233,14 @@ class ChecklistCompletion(ChecklistCompletionBase):
         from_attributes = True
 
 
-# Supply Schemas
+# Supply Schemas (Scorte Globali)
 class SupplyBase(BaseModel):
     name: str
-    apartment_id: int
-    quantity: int = 0
-    min_quantity: int = 5
+    total_quantity: int = 0
     unit: Optional[str] = None
     category: Optional[str] = None
+    room: Optional[str] = None
+    amazon_link: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -224,11 +250,11 @@ class SupplyCreate(SupplyBase):
 
 class SupplyUpdate(BaseModel):
     name: Optional[str] = None
-    apartment_id: Optional[int] = None
-    quantity: Optional[int] = None
-    min_quantity: Optional[int] = None
+    total_quantity: Optional[int] = None
     unit: Optional[str] = None
     category: Optional[str] = None
+    room: Optional[str] = None
+    amazon_link: Optional[str] = None
     notes: Optional[str] = None
 
 
@@ -239,6 +265,37 @@ class Supply(SupplyBase):
 
     class Config:
         from_attributes = True
+
+
+# ApartmentSupply Schemas (Collegamento Appartamento-Scorte)
+class ApartmentSupplyBase(BaseModel):
+    apartment_id: int
+    supply_id: int
+    required_quantity: int = 0
+    min_quantity: int = 1
+
+
+class ApartmentSupplyCreate(ApartmentSupplyBase):
+    pass
+
+
+class ApartmentSupplyUpdate(BaseModel):
+    required_quantity: Optional[int] = None
+    min_quantity: Optional[int] = None
+
+
+class ApartmentSupply(ApartmentSupplyBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+# Schema esteso con dettagli della scorta globale
+class ApartmentSupplyWithDetails(ApartmentSupply):
+    supply: Supply
 
 
 # SupplyAlert Schemas

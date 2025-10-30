@@ -20,50 +20,61 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Package, Plus, Edit, Trash2, Home, Building2, Filter, AlertTriangle, ExternalLink } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Package, Plus, Edit, Trash2, ExternalLink, AlertTriangle, Home, ChevronDown, ChevronUp, ShoppingCart } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export default function AdminSupplies() {
   const queryClient = useQueryClient();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSupply, setEditingSupply] = useState(null);
-  const [selectedProperty, setSelectedProperty] = useState("all");
-  const [selectedApartment, setSelectedApartment] = useState("all");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [expandedSupplies, setExpandedSupplies] = useState({});
   const [formData, setFormData] = useState({
-    apartment_id: "",
-    room_id: "",
     name: "",
-    category: "pulizia",
-    current_quantity: 0,
-    min_quantity: 1,
+    total_quantity: 0,
     unit: "pz",
+    category: "generale",
+    room: "",
     amazon_link: "",
     notes: ""
   });
 
-  const { data: properties } = useQuery({
-    queryKey: ['properties'],
-    queryFn: () => apiClient.getProperties({ active: true }),
+  const { data: supplies, isLoading } = useQuery({
+    queryKey: ['supplies'],
+    queryFn: () => apiClient.getSupplies(),
     initialData: [],
   });
 
   const { data: apartments } = useQuery({
     queryKey: ['apartments'],
-    queryFn: () => apiClient.getApartments({ active: true }),
+    queryFn: () => apiClient.getApartments(),
     initialData: [],
   });
 
-  const { data: supplies, isLoading } = useQuery({
-    queryKey: ['supplies'],
-    queryFn: () => apiClient.getSupplies('-created_date'),
-    initialData: [],
-  });
-
-  const { data: supplyAlerts } = useQuery({
-    queryKey: ['supply-alerts'],
-    queryFn: () => apiClient.getSupplyAlerts({ resolved: false }),
+  // Carica tutte le assegnazioni per tutti gli appartamenti
+  const apartmentSuppliesQueries = useQuery({
+    queryKey: ['all-apartment-supplies'],
+    queryFn: async () => {
+      const results = await Promise.all(
+        apartments.map(apt => 
+          apiClient.getApartmentSupplies(apt.id)
+            .then(supplies => ({ apartmentId: apt.id, supplies }))
+            .catch(() => ({ apartmentId: apt.id, supplies: [] }))
+        )
+      );
+      return results;
+    },
+    enabled: apartments.length > 0,
     initialData: [],
   });
 
@@ -92,22 +103,13 @@ export default function AdminSupplies() {
     },
   });
 
-  const resolveAlertMutation = useMutation({
-    mutationFn: (alertId) => apiClient.resolveSupplyAlert(alertId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['supply-alerts'] });
-    },
-  });
-
   const resetForm = () => {
     setFormData({
-      apartment_id: "",
-      room_id: "",
       name: "",
-      category: "pulizia",
-      current_quantity: 0,
-      min_quantity: 1,
+      total_quantity: 0,
       unit: "pz",
+      category: "generale",
+      room: "",
       amazon_link: "",
       notes: ""
     });
@@ -116,7 +118,15 @@ export default function AdminSupplies() {
 
   const handleEdit = (supply) => {
     setEditingSupply(supply);
-    setFormData(supply);
+    setFormData({
+      name: supply.name,
+      total_quantity: supply.total_quantity,
+      unit: supply.unit || "pz",
+      category: supply.category || "generale",
+      room: supply.room || "",
+      amazon_link: supply.amazon_link || "",
+      notes: supply.notes || ""
+    });
     setDialogOpen(true);
   };
 
@@ -129,49 +139,62 @@ export default function AdminSupplies() {
     }
   };
 
+  const toggleExpanded = (supplyId) => {
+    setExpandedSupplies(prev => ({
+      ...prev,
+      [supplyId]: !prev[supplyId]
+    }));
+  };
+
+  // Funzione per ottenere le assegnazioni di una specifica scorta
+  const getSupplyAssignments = (supplyId) => {
+    if (!apartmentSuppliesQueries.data) return [];
+    
+    const assignments = [];
+    apartmentSuppliesQueries.data.forEach(({ apartmentId, supplies }) => {
+      const assignment = supplies.find(s => s.supply_id === supplyId);
+      if (assignment) {
+        const apartment = apartments.find(a => a.id === apartmentId);
+        assignments.push({
+          apartment,
+          ...assignment
+        });
+      }
+    });
+    return assignments;
+  };
+
+  // Funzione per calcolare le scorte totali richieste
+  const getTotalRequiredQuantity = (supplyId) => {
+    const assignments = getSupplyAssignments(supplyId);
+    return assignments.reduce((sum, a) => sum + a.required_quantity, 0);
+  };
+
   const getApartmentName = (apartmentId) => {
     const apt = apartments.find(a => a.id === apartmentId);
     return apt?.name || 'N/A';
   };
 
-  const filteredApartments = selectedProperty === "all"
-    ? apartments
-    : apartments.filter(apt => apt.property_id === selectedProperty);
-
-  const filteredSupplies = supplies.filter(supply => {
-    if (selectedApartment !== "all" && supply.apartment_id !== selectedApartment) return false;
-    if (selectedApartment === "all" && selectedProperty !== "all") {
-      const apt = apartments.find(a => a.id === supply.apartment_id);
-      if (!apt || apt.property_id !== selectedProperty) return false;
-    }
-    return true;
-  });
-
-  const isLowStock = (supply) => {
-    return supply.current_quantity <= supply.min_quantity;
-  };
-
-  const hasAlert = (supplyId) => {
-    return supplyAlerts.some(alert => alert.supply_id === supplyId);
-  };
+  const filteredSupplies = (selectedCategory === "all"
+    ? supplies
+    : supplies.filter(supply => supply.category === selectedCategory)
+  ).sort((a, b) => a.name.localeCompare(b.name));
 
   const categoryColors = {
-    pulizia: "bg-teal-100 text-teal-700",
-    igiene: "bg-blue-100 text-blue-700",
-    cucina: "bg-orange-100 text-orange-700",
-    bagno: "bg-purple-100 text-purple-700",
-    altro: "bg-gray-100 text-gray-700"
+    bagno: "bg-blue-100 text-blue-700",
+    "camera da letto": "bg-purple-100 text-purple-700",
+    salotto: "bg-teal-100 text-teal-700",
+    ingresso: "bg-orange-100 text-orange-700",
+    generale: "bg-gray-100 text-gray-700"
   };
-
-  const unresolvedAlerts = supplyAlerts.length;
 
   return (
     <div className="p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Scorte</h1>
-            <p className="text-gray-600">Gestisci i prodotti per ogni appartamento</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Scorte Globali</h1>
+            <p className="text-gray-600">Gestisci le scorte disponibili per tutti gli appartamenti</p>
           </div>
           <Button
             onClick={() => {
@@ -179,225 +202,232 @@ export default function AdminSupplies() {
               setDialogOpen(true);
             }}
             className="bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 shadow-lg shadow-teal-500/30"
-            disabled={apartments.length === 0}
           >
             <Plus className="w-4 h-4 mr-2" />
             Nuova Scorta
           </Button>
         </div>
 
-        {unresolvedAlerts > 0 && (
-          <Alert className="mb-6 border-orange-300 bg-gradient-to-r from-orange-50 to-red-50">
-            <AlertTriangle className="h-5 w-5 text-orange-600" />
-            <AlertDescription className="text-orange-900">
-              <strong>{unresolvedAlerts} segnalazion{unresolvedAlerts > 1 ? 'i' : 'e'} di scorte</strong> da gestire.
-              Controlla le scorte evidenziate qui sotto.
-            </AlertDescription>
-          </Alert>
-        )}
+        <Card className="mb-6 border-none shadow-lg">
+          <CardContent className="p-6">
+            <div>
+              <Label className="mb-2 block">Filtra per Stanza</Label>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutte le Stanze</SelectItem>
+                  <SelectItem value="bagno">Bagno</SelectItem>
+                  <SelectItem value="camera da letto">Camera da Letto</SelectItem>
+                  <SelectItem value="salotto">Salotto</SelectItem>
+                  <SelectItem value="ingresso">Ingresso</SelectItem>
+                  <SelectItem value="generale">Generale</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
-        {apartments.length === 0 && (
-          <Alert className="mb-6 border-orange-200 bg-orange-50">
-            <AlertDescription className="text-orange-800">
-              ⚠️ <strong>Attenzione:</strong> Devi prima creare almeno un appartamento prima di poter aggiungere scorte.
-            </AlertDescription>
-          </Alert>
-        )}
+        <Card className="border-none shadow-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-gradient-to-r from-teal-50 to-cyan-50 hover:from-teal-50 hover:to-cyan-50">
+                  <TableHead className="font-bold text-gray-900 py-4 px-6">Nome Prodotto</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6">Stato</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6">Stanza</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6">Scorte Totali</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6 text-right">Azioni</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  Array(5).fill(0).map((_, i) => (
+                    <TableRow key={i}>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-40" /></TableCell>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-24" /></TableCell>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-24" /></TableCell>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-20" /></TableCell>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-20" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : filteredSupplies.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-center py-12 px-6">
+                      <Package className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                      <p className="text-gray-500 text-lg mb-2">
+                        Nessuna scorta registrata
+                      </p>
+                      <p className="text-gray-400 text-sm">
+                        Clicca su "Nuova Scorta" per iniziare
+                      </p>
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredSupplies.map((supply) => {
+                    const assignments = getSupplyAssignments(supply.id);
+                    const totalAvailable = getTotalRequiredQuantity(supply.id);
+                    // Verifica se qualche appartamento ha scorte basse
+                    const hasLowStock = assignments.some(a => a.required_quantity <= a.min_quantity);
+                    const isExpanded = expandedSupplies[supply.id];
 
-        {apartments.length > 0 && (
-          <Card className="mb-6 border-none shadow-lg">
-            <CardContent className="p-6">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <Label className="mb-2 block">Filtra per Struttura</Label>
-                  <Select
-                    value={selectedProperty}
-                    onValueChange={(value) => {
-                      setSelectedProperty(value);
-                      setSelectedApartment("all");
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        <div className="flex items-center gap-2">
-                          <Building2 className="w-4 h-4" />
-                          Tutte le Strutture
-                        </div>
-                      </SelectItem>
-                      {properties.map((property) => (
-                        <SelectItem key={property.id} value={property.id}>
-                          <div className="flex items-center gap-2">
-                            <Building2 className="w-4 h-4" />
-                            {property.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label className="mb-2 block">Filtra per Appartamento</Label>
-                  <Select
-                    value={selectedApartment}
-                    onValueChange={setSelectedApartment}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">
-                        <div className="flex items-center gap-2">
-                          <Home className="w-4 h-4" />
-                          Tutti gli Appartamenti
-                        </div>
-                      </SelectItem>
-                      {filteredApartments.map((apt) => (
-                        <SelectItem key={apt.id} value={apt.id}>
-                          <div className="flex items-center gap-2">
-                            <Home className="w-4 h-4" />
-                            {apt.name}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {isLoading ? (
-            Array(6).fill(0).map((_, i) => (
-              <Skeleton key={i} className="h-48 w-full" />
-            ))
-          ) : filteredSupplies.length === 0 ? (
-            <Card className="col-span-full border-none shadow-lg">
-              <CardContent className="p-12 text-center">
-                <Package className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                <p className="text-gray-500 text-lg mb-2">
-                  Nessuna scorta registrata
-                </p>
-                <p className="text-gray-400 text-sm">
-                  Clicca su "Nuova Scorta" per iniziare
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            filteredSupplies.map((supply) => {
-              const lowStock = isLowStock(supply);
-              const alert = hasAlert(supply.id);
-              return (
-                <Card
-                  key={supply.id}
-                  className={`border-none shadow-lg hover:shadow-xl transition-all duration-300 ${
-                    alert ? 'border-2 border-orange-400 bg-orange-50' : ''
-                  }`}
-                >
-                  <CardHeader className="border-b bg-gradient-to-r from-teal-50 to-cyan-50">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <CardTitle className="text-lg mb-2 flex items-center gap-2">
-                          <Package className="w-5 h-5 text-teal-600" />
-                          {supply.name}
-                        </CardTitle>
-                        <div className="flex flex-wrap gap-2">
-                          <Badge className={categoryColors[supply.category]}>
-                            {supply.category}
-                          </Badge>
-                          {alert && (
-                            <Badge className="bg-orange-100 text-orange-700">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              Segnalato
-                            </Badge>
-                          )}
-                          {lowStock && !alert && (
-                            <Badge className="bg-yellow-100 text-yellow-700">
-                              Scorta bassa
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="p-6">
-                    <div className="space-y-3">
-                      <div className="flex items-center gap-2 text-sm bg-teal-50 p-2 rounded-lg">
-                        <Home className="w-4 h-4 text-teal-600" />
-                        <span className="text-teal-700 font-medium">
-                          {getApartmentName(supply.apartment_id)}
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-600">Quantità:</span>
-                        <span className={`text-xl font-bold ${
-                          lowStock ? 'text-orange-600' : 'text-teal-600'
-                        }`}>
-                          {supply.current_quantity} {supply.unit}
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-500">
-                        Min: {supply.min_quantity} {supply.unit}
-                      </div>
-                      {supply.amazon_link && (
-                        <a
-                          href={supply.amazon_link}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 hover:underline"
+                    return (
+                      <React.Fragment key={supply.id}>
+                        <TableRow 
+                          className={`cursor-pointer hover:bg-teal-50/50 transition-colors ${
+                            hasLowStock ? 'bg-orange-50/30' : ''
+                          }`}
+                          onClick={() => toggleExpanded(supply.id)}
                         >
-                          <ExternalLink className="w-4 h-4" />
-                          Link Amazon
-                        </a>
-                      )}
-                    </div>
-                    <div className="flex gap-2 mt-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(supply)}
-                        className="flex-1"
-                      >
-                        <Edit className="w-4 h-4 mr-1" />
-                        Modifica
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (confirm('Sei sicuro di voler eliminare questa scorta?')) {
-                            deleteMutation.mutate(supply.id);
-                          }
-                        }}
-                        className="text-red-600 border-red-200 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                    {alert && (
-                      <Button
-                        size="sm"
-                        className="w-full mt-2 bg-green-600 hover:bg-green-700"
-                        onClick={() => {
-                          const alertToResolve = supplyAlerts.find(a => a.supply_id === supply.id);
-                          if (alertToResolve) {
-                            resolveAlertMutation.mutate(alertToResolve.id);
-                          }
-                        }}
-                      >
-                        Segna come Gestito
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-              );
-            })
-          )}
-        </div>
+                          <TableCell className="font-medium py-4 px-6">
+                            <div className="flex items-center gap-3">
+                              <Package className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                              <span>{supply.name}</span>
+                              {assignments.length > 0 && (
+                                <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-300 text-xs">
+                                  <Home className="w-3 h-3 mr-1" />
+                                  {assignments.length}
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4 px-6">
+                            {hasLowStock && (
+                              <Badge className="bg-orange-100 text-orange-700">
+                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                Basso
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-4 px-6">
+                            <Badge className={categoryColors[supply.category]}>
+                              {supply.category}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="py-4 px-6">
+                            <span className={`font-bold ${hasLowStock ? 'text-orange-600' : 'text-teal-600'}`}>
+                              {totalAvailable} {supply.unit}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-4 px-6 text-right">
+                            <div className="flex gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                disabled={!supply.amazon_link}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (supply.amazon_link) {
+                                    window.open(supply.amazon_link, '_blank', 'noopener,noreferrer');
+                                  }
+                                }}
+                                className={`gap-1 ${
+                                  supply.amazon_link 
+                                    ? 'bg-orange-500 hover:bg-orange-600 text-white border-orange-600 hover:border-orange-700' 
+                                    : 'text-gray-400 cursor-not-allowed'
+                                }`}
+                                title={supply.amazon_link ? 'Acquista su Amazon' : 'Link Amazon non disponibile'}
+                              >
+                                <ShoppingCart className="w-4 h-4" />
+                                Acquista
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleEdit(supply)}
+                                className="hover:bg-teal-50"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  if (assignments.length > 0) {
+                                    if (!confirm(`Questa scorta è assegnata a ${assignments.length} appartament${assignments.length > 1 ? 'i' : 'o'}. Sei sicuro di volerla eliminare?`)) {
+                                      return;
+                                    }
+                                  } else if (!confirm('Sei sicuro di voler eliminare questa scorta?')) {
+                                    return;
+                                  }
+                                  deleteMutation.mutate(supply.id);
+                                }}
+                                className="text-red-600 border-red-200 hover:bg-red-50"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                        {/* Accordion Row */}
+                        {isExpanded && assignments.length > 0 && (
+                          <TableRow className="bg-gray-50">
+                            <TableCell colSpan={5} className="p-0">
+                              <div className="p-6 space-y-3">
+                                <div className="flex items-center gap-2 mb-4">
+                                  <Home className="w-5 h-5 text-teal-600" />
+                                  <h4 className="font-semibold text-gray-900">
+                                    Appartamenti Assegnati ({assignments.length})
+                                  </h4>
+                                </div>
+                                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
+                                  {assignments.map((assignment) => (
+                                    <div 
+                                      key={assignment.id}
+                                      className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                                    >
+                                      <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                          <p className="font-semibold text-gray-900 mb-2">
+                                            {assignment.apartment?.name}
+                                          </p>
+                                          <div className="space-y-1">
+                                            <p className="text-sm text-gray-600">
+                                              <span className="font-medium">Disponibile:</span>{' '}
+                                              <span className="font-bold text-teal-600">
+                                                {assignment.required_quantity} {supply.unit}
+                                              </span>
+                                            </p>
+                                            <p className="text-sm text-gray-500">
+                                              <span className="font-medium">Minimo:</span>{' '}
+                                              {assignment.min_quantity} {supply.unit}
+                                            </p>
+                                          </div>
+                                          {supply.amazon_link && (
+                                            <a
+                                              href={supply.amazon_link}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline mt-2"
+                                              onClick={(e) => e.stopPropagation()}
+                                            >
+                                              <ExternalLink className="w-3 h-3" />
+                                              Amazon
+                                            </a>
+                                          )}
+                                        </div>
+                                        {assignment.required_quantity <= assignment.min_quantity && (
+                                          <Badge variant="outline" className="bg-orange-100 text-orange-700 text-xs ml-2">
+                                            Basso
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </React.Fragment>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
+        </Card>
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
@@ -409,25 +439,6 @@ export default function AdminSupplies() {
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="apartment_id">Appartamento *</Label>
-                <Select
-                  value={formData.apartment_id}
-                  onValueChange={(value) => setFormData({ ...formData, apartment_id: value })}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona appartamento" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {apartments.map((apt) => (
-                      <SelectItem key={apt.id} value={apt.id}>
-                        {apt.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
                 <Label htmlFor="name">Nome Prodotto *</Label>
                 <Input
                   id="name"
@@ -437,8 +448,9 @@ export default function AdminSupplies() {
                   required
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="category">Categoria</Label>
+                <Label htmlFor="category">Stanza</Label>
                 <Select
                   value={formData.category}
                   onValueChange={(value) => setFormData({ ...formData, category: value })}
@@ -447,33 +459,33 @@ export default function AdminSupplies() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pulizia">Pulizia</SelectItem>
-                    <SelectItem value="igiene">Igiene</SelectItem>
-                    <SelectItem value="cucina">Cucina</SelectItem>
                     <SelectItem value="bagno">Bagno</SelectItem>
-                    <SelectItem value="altro">Altro</SelectItem>
+                    <SelectItem value="camera da letto">Camera da Letto</SelectItem>
+                    <SelectItem value="salotto">Salotto</SelectItem>
+                    <SelectItem value="ingresso">Ingresso</SelectItem>
+                    <SelectItem value="generale">Generale</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <Label htmlFor="current_quantity">Quantità Attuale</Label>
+                  <Label htmlFor="room">Camera</Label>
                   <Input
-                    id="current_quantity"
-                    type="number"
-                    min="0"
-                    value={formData.current_quantity}
-                    onChange={(e) => setFormData({ ...formData, current_quantity: parseInt(e.target.value) || 0 })}
+                    id="room"
+                    value={formData.room}
+                    onChange={(e) => setFormData({ ...formData, room: e.target.value })}
+                    placeholder="es: Bagno, Cucina"
                   />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="min_quantity">Min</Label>
+                  <Label htmlFor="total_quantity">Quantità Totale</Label>
                   <Input
-                    id="min_quantity"
+                    id="total_quantity"
                     type="number"
                     min="0"
-                    value={formData.min_quantity}
-                    onChange={(e) => setFormData({ ...formData, min_quantity: parseInt(e.target.value) || 1 })}
+                    value={formData.total_quantity}
+                    onChange={(e) => setFormData({ ...formData, total_quantity: parseInt(e.target.value) || 0 })}
                   />
                 </div>
                 <div>

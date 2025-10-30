@@ -32,7 +32,8 @@ import {
   ClipboardList,
   Package,
   DoorOpen,
-  AlertTriangle
+  AlertTriangle,
+  ExternalLink
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -82,17 +83,39 @@ export default function Apartments() {
     initialData: [],
   });
 
-  const { data: allSupplies } = useQuery({
-    queryKey: ['supplies'],
-    queryFn: () => apiClient.getSupplies(),
+  // Query per tutti gli apartment-checklist assignments (per il contatore)
+  const { data: allApartmentChecklists } = useQuery({
+    queryKey: ['all-apartment-checklist-items'],
+    queryFn: async () => {
+      // Fetch apartment checklist items per tutti gli appartamenti
+      const allAssignments = [];
+      for (const apartment of apartments) {
+        const assignments = await apiClient.getApartmentChecklists(apartment.id);
+        allAssignments.push(...assignments);
+      }
+      return allAssignments;
+    },
+    enabled: apartments.length > 0,
     initialData: [],
   });
 
-  const { data: supplyAlerts } = useQuery({
-    queryKey: ['supply-alerts'],
-    queryFn: () => apiClient.getSupplyAlerts({ is_resolved: false }),
+  // Query per tutti gli apartment-supply assignments (per il contatore)
+  const { data: allApartmentSuppliesAssignments } = useQuery({
+    queryKey: ['all-apartment-supply-items'],
+    queryFn: async () => {
+      // Fetch apartment supply items per tutti gli appartamenti
+      const allAssignments = [];
+      for (const apartment of apartments) {
+        const assignments = await apiClient.getApartmentSupplies(apartment.id);
+        allAssignments.push(...assignments);
+      }
+      return allAssignments;
+    },
+    enabled: apartments.length > 0,
     initialData: [],
   });
+
+  // Non servono più perché ora le scorte sono gestite diversamente
 
   const createMutation = useMutation({
     mutationFn: async (data) => {
@@ -149,28 +172,25 @@ export default function Apartments() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id) => {
+      // Elimina stanze
       const apartmentRooms = allRooms.filter(r => r.apartment_id === id);
       for (const room of apartmentRooms) {
         await apiClient.deleteRoom(room.id);
       }
       
+      // Elimina checklist
       const apartmentChecklists = allChecklists.filter(c => c.apartment_id === id);
       for (const checklist of apartmentChecklists) {
         await apiClient.deleteChecklistItem(checklist.id);
       }
       
-      const apartmentSupplies = allSupplies.filter(s => s.apartment_id === id);
-      for (const supply of apartmentSupplies) {
-        await apiClient.deleteSupply(supply.id);
-      }
-      
+      // Le assegnazioni scorte verranno eliminate automaticamente tramite cascade delete
       await apiClient.deleteApartment(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apartments'] });
       queryClient.invalidateQueries({ queryKey: ['rooms'] });
       queryClient.invalidateQueries({ queryKey: ['checklists'] });
-      queryClient.invalidateQueries({ queryKey: ['supplies'] });
     },
   });
 
@@ -244,15 +264,11 @@ export default function Apartments() {
   };
 
   const getChecklistCount = (apartmentId) => {
-    return allChecklists.filter(c => c.apartment_id === apartmentId).length;
+    return allApartmentChecklists.filter(ac => ac.apartment_id === apartmentId).length;
   };
 
   const getSupplyCount = (apartmentId) => {
-    return allSupplies.filter(s => s.apartment_id === apartmentId).length;
-  };
-
-  const getApartmentAlerts = (apartmentId) => {
-    return supplyAlerts.filter(a => a.apartment_id === apartmentId).length;
+    return allApartmentSuppliesAssignments.filter(as => as.apartment_id === apartmentId).length;
   };
 
   const filteredApartments = selectedPropertyFilter === "all" 
@@ -349,8 +365,6 @@ export default function Apartments() {
             </Card>
           ) : (
             filteredApartments.map((apartment) => {
-              const alerts = getApartmentAlerts(apartment.id);
-
               return (
                 <Card
                   key={apartment.id}
@@ -370,12 +384,6 @@ export default function Apartments() {
                           >
                             {apartment.active ? "Attivo" : "Non Attivo"}
                           </Badge>
-                          {alerts > 0 && (
-                            <Badge className="bg-orange-100 text-orange-700">
-                              <AlertTriangle className="w-3 h-3 mr-1" />
-                              {alerts} alert
-                            </Badge>
-                          )}
                         </div>
                       </div>
                     </div>
@@ -620,7 +628,6 @@ export default function Apartments() {
             onOpenChange={setManageDialogOpen}
             allRooms={allRooms}
             allChecklists={allChecklists}
-            allSupplies={allSupplies}
             queryClient={queryClient}
           />
         )}
@@ -630,12 +637,18 @@ export default function Apartments() {
 }
 
 // Componente per la gestione completa dell'appartamento
-function ManageApartmentDialog({ apartment, open, onOpenChange, allRooms, allChecklists, allSupplies, queryClient }) {
+function ManageApartmentDialog({ apartment, open, onOpenChange, allRooms, allChecklists, queryClient }) {
   const [activeTab, setActiveTab] = useState("rooms");
   
   const apartmentRooms = allRooms.filter(r => r.apartment_id === apartment.id);
   const apartmentChecklists = allChecklists.filter(c => c.apartment_id === apartment.id);
-  const apartmentSupplies = allSupplies.filter(s => s.apartment_id === apartment.id);
+  
+  // Carica scorte assegnate dinamicamente
+  const { data: apartmentSupplies = [] } = useQuery({
+    queryKey: ['apartment-supplies', apartment.id],
+    queryFn: () => apiClient.getApartmentSupplies(apartment.id),
+    enabled: open, // Carica solo quando il dialog è aperto
+  });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -674,8 +687,6 @@ function ManageApartmentDialog({ apartment, open, onOpenChange, allRooms, allChe
           <TabsContent value="checklist" className="mt-6">
             <ChecklistManager 
               apartmentId={apartment.id} 
-              rooms={apartmentRooms}
-              checklists={apartmentChecklists}
               queryClient={queryClient}
             />
           </TabsContent>
@@ -683,8 +694,6 @@ function ManageApartmentDialog({ apartment, open, onOpenChange, allRooms, allChe
           <TabsContent value="supplies" className="mt-6">
             <SuppliesManager 
               apartmentId={apartment.id} 
-              rooms={apartmentRooms}
-              supplies={apartmentSupplies}
               queryClient={queryClient}
             />
           </TabsContent>
@@ -797,321 +806,366 @@ function RoomsManager({ apartmentId, rooms, queryClient }) {
   );
 }
 
-// Componente per gestire la checklist
-function ChecklistManager({ apartmentId, rooms, checklists, queryClient }) {
-  const [newChecklist, setNewChecklist] = useState({
-    title: "",
-    description: "",
-    room_id: null,
-    is_mandatory: false
+// Componente per gestire le scorte dell'appartamento
+function SuppliesManager({ apartmentId, queryClient }) {
+  const [selectedSupply, setSelectedSupply] = useState("");
+  const [assignData, setAssignData] = useState({
+    required_quantity: 0,
+    min_quantity: 1
   });
   
-  const addChecklistMutation = useMutation({
-    mutationFn: (data) => apiClient.createChecklistItem({
-      ...data,
-      apartment_id: apartmentId,
-      order: checklists.length
-    }),
+  // Carica scorte globali
+  const { data: globalSupplies = [] } = useQuery({
+    queryKey: ['global-supplies'],
+    queryFn: () => apiClient.getSupplies(),
+  });
+  
+  // Carica scorte assegnate a questo appartamento
+  const { data: apartmentSupplies = [], isLoading } = useQuery({
+    queryKey: ['apartment-supplies', apartmentId],
+    queryFn: () => apiClient.getApartmentSupplies(apartmentId),
+  });
+  
+  const assignSupplyMutation = useMutation({
+    mutationFn: (data) => apiClient.addSupplyToApartment(apartmentId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['checklists'] });
-      setNewChecklist({ title: "", description: "", room_id: null, is_mandatory: false });
+      queryClient.invalidateQueries({ queryKey: ['apartment-supplies', apartmentId] });
+      setSelectedSupply("");
+      setAssignData({ required_quantity: 0, min_quantity: 1 });
     },
   });
 
-  const deleteChecklistMutation = useMutation({
-    mutationFn: (id) => apiClient.deleteChecklistItem(id),
+  const updateSupplyMutation = useMutation({
+    mutationFn: ({ id, data }) => apiClient.updateApartmentSupply(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['checklists'] });
+      queryClient.invalidateQueries({ queryKey: ['apartment-supplies', apartmentId] });
     },
   });
 
-  const getRoomName = (roomId) => {
-    if (!roomId) return "Generale";
-    const room = rooms.find(r => r.id === roomId);
-    return room?.name || "N/A";
+  const removeSupplyMutation = useMutation({
+    mutationFn: (id) => apiClient.removeSupplyFromApartment(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apartment-supplies', apartmentId] });
+    },
+  });
+
+  // Scorte globali non ancora assegnate a questo appartamento
+  const assignedSupplyIds = apartmentSupplies.map(as => as.supply_id);
+  const availableSupplies = globalSupplies.filter(s => !assignedSupplyIds.includes(s.id));
+
+  const categoryColors = {
+    bagno: "bg-blue-100 text-blue-700",
+    "camera da letto": "bg-purple-100 text-purple-700",
+    salotto: "bg-teal-100 text-teal-700",
+    ingresso: "bg-orange-100 text-orange-700",
+    generale: "bg-gray-100 text-gray-700"
   };
 
   return (
     <div className="space-y-4">
-      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-        <h4 className="font-semibold mb-3">Aggiungi Attività alla Checklist</h4>
+      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+        <h4 className="font-semibold mb-3">Assegna Scorta Globale</h4>
         <div className="space-y-3">
-          <Input
-            placeholder="Titolo attività (es: Pulizia Sanitari)"
-            value={newChecklist.title}
-            onChange={(e) => setNewChecklist({ ...newChecklist, title: e.target.value })}
-          />
-          <Textarea
-            placeholder="Descrizione (opzionale)"
-            value={newChecklist.description}
-            onChange={(e) => setNewChecklist({ ...newChecklist, description: e.target.value })}
-            rows={2}
-          />
-          <div className="flex gap-3">
-            <Select
-              value={newChecklist.room_id || ""}
-              onValueChange={(value) => setNewChecklist({ ...newChecklist, room_id: value ? parseInt(value) : null })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Stanza (opzionale)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={null}>Generale</SelectItem>
-                {rooms.map((room) => (
-                  <SelectItem key={room.id} value={room.id}>
-                    {room.name}
+          <Select
+            value={selectedSupply}
+            onValueChange={setSelectedSupply}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleziona una scorta globale..." />
+            </SelectTrigger>
+            <SelectContent>
+              {availableSupplies.length === 0 ? (
+                <SelectItem value="none" disabled>
+                  Nessuna scorta disponibile
+                </SelectItem>
+              ) : (
+                availableSupplies.map((supply) => (
+                  <SelectItem key={supply.id} value={supply.id.toString()}>
+                    {supply.name} - {supply.room || "Generale"} ({supply.total_quantity} {supply.unit} disponibili)
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button
-              onClick={() => {
-                if (newChecklist.title) {
-                  addChecklistMutation.mutate(newChecklist);
-                }
-              }}
-              disabled={!newChecklist.title || addChecklistMutation.isPending}
-            >
-              <Plus className="w-4 h-4 mr-1" />
-              Aggiungi
-            </Button>
-          </div>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          
+          {selectedSupply && (
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="text-xs">Quantità Disponibile</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="Qtà disponibile"
+                  value={assignData.required_quantity}
+                  onChange={(e) => setAssignData({ ...assignData, required_quantity: parseInt(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Quantità Minima</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  placeholder="Min"
+                  value={assignData.min_quantity}
+                  onChange={(e) => setAssignData({ ...assignData, min_quantity: parseInt(e.target.value) || 1 })}
+                />
+              </div>
+            </div>
+          )}
+          
+          <Button
+            onClick={() => {
+              if (selectedSupply) {
+                assignSupplyMutation.mutate({
+                  supply_id: parseInt(selectedSupply),
+                  apartment_id: apartmentId,
+                  ...assignData
+                });
+              }
+            }}
+            disabled={!selectedSupply || assignSupplyMutation.isPending}
+            className="w-full"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Assegna Scorta
+          </Button>
         </div>
+        
+        {globalSupplies.length === 0 && (
+          <Alert className="mt-3 border-orange-300">
+            <AlertDescription className="text-sm">
+              ⚠️ Non ci sono scorte globali. Vai nella sezione "Scorte" per crearne.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
-      {checklists.length === 0 ? (
+      {isLoading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
+        </div>
+      ) : apartmentSupplies.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
-          <ClipboardList className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-          <p>Nessuna attività in checklist</p>
+          <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+          <p>Nessuna scorta assegnata a questo appartamento</p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {checklists.map((item) => (
-            <Card key={item.id} className="border border-gray-200">
-              <CardContent className="p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <p className="font-medium mb-2">{item.title}</p>
-                    {item.description && (
-                      <p className="text-sm text-gray-600 mb-2">{item.description}</p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {item.is_mandatory && (
-                        <Badge className="bg-red-100 text-red-700">Obbligatoria</Badge>
-                      )}
-                      <Badge variant="outline">
-                        {getRoomName(item.room_id)}
-                      </Badge>
-                      <Badge variant="outline">Ordine: {item.order}</Badge>
+        <div className="space-y-3">
+          {apartmentSupplies.map((apartmentSupply) => {
+            const supply = apartmentSupply.supply;
+            
+            return (
+              <Card key={apartmentSupply.id} className="border border-gray-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-4">
+                    {/* Nome Scorta */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900">{supply.name}</p>
+                      <p className="text-xs text-gray-500">{supply.unit}</p>
                     </div>
+                    
+                    {/* Disponibilità Attuali */}
+                    <div className="w-28">
+                      <Label className="text-xs text-gray-600 mb-1 block">Disponibile</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={apartmentSupply.required_quantity}
+                        onChange={(e) => {
+                          const newValue = parseInt(e.target.value) || 0;
+                          updateSupplyMutation.mutate({
+                            id: apartmentSupply.id,
+                            data: { required_quantity: newValue }
+                          });
+                        }}
+                        className="h-9 text-center"
+                      />
+                    </div>
+                    
+                    {/* Minime Richieste */}
+                    <div className="w-28">
+                      <Label className="text-xs text-gray-600 mb-1 block">Minima</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={apartmentSupply.min_quantity}
+                        onChange={(e) => {
+                          const newValue = parseInt(e.target.value) || 0;
+                          updateSupplyMutation.mutate({
+                            id: apartmentSupply.id,
+                            data: { min_quantity: newValue }
+                          });
+                        }}
+                        className="h-9 text-center"
+                      />
+                    </div>
+                    
+                    {/* Elimina */}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        if (confirm('Rimuovere questa scorta dall\'appartamento?')) {
+                          removeSupplyMutation.mutate(apartmentSupply.id);
+                        }
+                      }}
+                      className="text-red-600 hover:bg-red-50 flex-shrink-0"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => {
-                      if (confirm('Eliminare questa attività?')) {
-                        deleteChecklistMutation.mutate(item.id);
-                      }
-                    }}
-                    className="text-red-600 hover:bg-red-50"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// Componente per gestire le scorte
-function SuppliesManager({ apartmentId, rooms, supplies, queryClient }) {
-  const [newSupply, setNewSupply] = useState({
-    name: "",
-    category: "pulizia",
-    current_quantity: 0,
-    min_quantity: 1,
-    unit: "pz",
-    amazon_link: "",
-    room_id: ""
+// Componente per gestire le checklist dell'appartamento
+function ChecklistManager({ apartmentId, queryClient }) {
+  const [selectedChecklist, setSelectedChecklist] = useState("");
+  
+  // Carica checklist globali
+  const { data: globalChecklists = [] } = useQuery({
+    queryKey: ['checklist-items'],
+    queryFn: () => apiClient.getChecklistItems(),
   });
   
-  const addSupplyMutation = useMutation({
-    mutationFn: (data) => apiClient.createSupply({
-      ...data,
-      apartment_id: apartmentId
-    }),
+  // Carica checklist assegnate a questo appartamento
+  const { data: apartmentChecklists = [], isLoading } = useQuery({
+    queryKey: ['apartment-checklists', apartmentId],
+    queryFn: () => apiClient.getApartmentChecklists(apartmentId),
+  });
+  
+  const assignChecklistMutation = useMutation({
+    mutationFn: (data) => apiClient.addChecklistToApartment(apartmentId, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['supplies'] });
-      setNewSupply({
-        name: "",
-        category: "pulizia",
-        current_quantity: 0,
-        min_quantity: 1,
-        unit: "pz",
-        amazon_link: "",
-        room_id: ""
-      });
+      queryClient.invalidateQueries({ queryKey: ['apartment-checklists', apartmentId] });
+      setSelectedChecklist("");
     },
   });
 
-  const deleteSupplyMutation = useMutation({
-    mutationFn: (id) => apiClient.deleteSupply(id),
+  const removeChecklistMutation = useMutation({
+    mutationFn: (id) => apiClient.removeChecklistFromApartment(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['supplies'] });
+      queryClient.invalidateQueries({ queryKey: ['apartment-checklists', apartmentId] });
     },
   });
 
-  const getRoomName = (roomId) => {
-    if (!roomId) return "Generale";
-    const room = rooms.find(r => r.id === roomId);
-    return room?.name || "N/A";
-  };
+  // Checklist globali non ancora assegnate a questo appartamento
+  const assignedChecklistIds = apartmentChecklists.map(ac => ac.checklist_item_id);
+  const availableChecklists = globalChecklists.filter(c => !assignedChecklistIds.includes(c.id));
 
-  const categoryColors = {
-    pulizia: "bg-teal-100 text-teal-700",
-    igiene: "bg-blue-100 text-blue-700",
-    cucina: "bg-orange-100 text-orange-700",
-    bagno: "bg-purple-100 text-purple-700",
-    altro: "bg-gray-100 text-gray-700"
+  const roomColors = {
+    bagno: "bg-blue-100 text-blue-700",
+    "camera da letto": "bg-purple-100 text-purple-700",
+    salotto: "bg-teal-100 text-teal-700",
+    ingresso: "bg-orange-100 text-orange-700",
+    generale: "bg-gray-100 text-gray-700"
   };
 
   return (
     <div className="space-y-4">
-      <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-        <h4 className="font-semibold mb-3">Aggiungi Scorta</h4>
+      <div className="bg-teal-50 border border-teal-200 rounded-lg p-4">
+        <h4 className="font-semibold mb-3">Assegna Checklist Globale</h4>
         <div className="space-y-3">
-          <Input
-            placeholder="Nome prodotto (es: Carta Igienica)"
-            value={newSupply.name}
-            onChange={(e) => setNewSupply({ ...newSupply, name: e.target.value })}
-          />
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <Select
-              value={newSupply.category}
-              onValueChange={(value) => setNewSupply({ ...newSupply, category: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="pulizia">Pulizia</SelectItem>
-                <SelectItem value="igiene">Igiene</SelectItem>
-                <SelectItem value="cucina">Cucina</SelectItem>
-                <SelectItem value="bagno">Bagno</SelectItem>
-                <SelectItem value="altro">Altro</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              type="number"
-              placeholder="Qtà"
-              value={newSupply.current_quantity}
-              onChange={(e) => setNewSupply({ ...newSupply, current_quantity: parseInt(e.target.value) || 0 })}
-            />
-            <Input
-              type="number"
-              placeholder="Min"
-              value={newSupply.min_quantity}
-              onChange={(e) => setNewSupply({ ...newSupply, min_quantity: parseInt(e.target.value) || 1 })}
-            />
-            <Input
-              placeholder="Unità"
-              value={newSupply.unit}
-              onChange={(e) => setNewSupply({ ...newSupply, unit: e.target.value })}
-            />
-          </div>
-          <div className="flex gap-3">
-            <Select
-              value={newSupply.room_id}
-              onValueChange={(value) => setNewSupply({ ...newSupply, room_id: value })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Stanza (opzionale)" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={null}>Generale</SelectItem>
-                {rooms.map((room) => (
-                  <SelectItem key={room.id} value={room.id}>
-                    {room.name}
+          <Select
+            value={selectedChecklist}
+            onValueChange={setSelectedChecklist}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Seleziona una checklist globale..." />
+            </SelectTrigger>
+            <SelectContent>
+              {availableChecklists.length === 0 ? (
+                <SelectItem value="none" disabled>
+                  Nessuna checklist disponibile
+                </SelectItem>
+              ) : (
+                availableChecklists.map((checklist) => (
+                  <SelectItem key={checklist.id} value={checklist.id.toString()}>
+                    {checklist.title} {checklist.room_name && `- ${checklist.room_name}`}
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              placeholder="Link Amazon (opzionale)"
-              value={newSupply.amazon_link}
-              onChange={(e) => setNewSupply({ ...newSupply, amazon_link: e.target.value })}
-            />
-          </div>
+                ))
+              )}
+            </SelectContent>
+          </Select>
+          
           <Button
             onClick={() => {
-              if (newSupply.name) {
-                addSupplyMutation.mutate(newSupply);
+              if (selectedChecklist) {
+                assignChecklistMutation.mutate({
+                  checklist_item_id: parseInt(selectedChecklist),
+                  apartment_id: apartmentId
+                });
               }
             }}
-            disabled={!newSupply.name || addSupplyMutation.isPending}
+            disabled={!selectedChecklist || assignChecklistMutation.isPending}
             className="w-full"
           >
             <Plus className="w-4 h-4 mr-1" />
-            Aggiungi Scorta
+            Assegna Checklist
           </Button>
         </div>
+        
+        {globalChecklists.length === 0 && (
+          <Alert className="mt-3 border-teal-300">
+            <AlertDescription className="text-sm">
+              ⚠️ Non ci sono checklist globali. Vai nella sezione "Checklist" per crearne.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
-      {supplies.length === 0 ? (
+      {isLoading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
+        </div>
+      ) : apartmentChecklists.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
-          <Package className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-          <p>Nessuna scorta registrata</p>
+          <ClipboardList className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+          <p>Nessuna checklist assegnata a questo appartamento</p>
         </div>
       ) : (
-        <div className="grid md:grid-cols-2 gap-3">
-          {supplies.map((supply) => {
-            const isLow = supply.current_quantity <= supply.min_quantity;
+        <div className="space-y-3">
+          {apartmentChecklists.map((apartmentChecklist) => {
+            const checklist = apartmentChecklist.checklist_item;
+            
             return (
-              <Card key={supply.id} className={`border ${isLow ? 'border-orange-300 bg-orange-50' : 'border-gray-200'}`}>
+              <Card key={apartmentChecklist.id} className="border border-gray-200">
                 <CardContent className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1">
-                      <p className="font-medium">{supply.name}</p>
-                      <div className="flex gap-2 mt-2">
-                        <Badge className={categoryColors[supply.category]}>
-                          {supply.category}
-                        </Badge>
-                        <Badge variant="outline">
-                          {getRoomName(supply.room_id)}
-                        </Badge>
-                        {isLow && (
-                          <Badge className="bg-orange-100 text-orange-700">
-                            <AlertTriangle className="w-3 h-3 mr-1" />
-                            Bassa
-                          </Badge>
-                        )}
-                      </div>
+                  <div className="flex items-center justify-between gap-4">
+                    {/* Nome Checklist */}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900">{checklist.title}</p>
+                      {checklist.description && (
+                        <p className="text-xs text-gray-500 mt-1">{checklist.description}</p>
+                      )}
                     </div>
+                    
+                    {/* Badge Stanza */}
+                    {checklist.room_name && (
+                      <Badge className={roomColors[checklist.room_name]}>
+                        {checklist.room_name}
+                      </Badge>
+                    )}
+                    
+                    {/* Elimina */}
                     <Button
                       variant="ghost"
                       size="icon"
                       onClick={() => {
-                        if (confirm('Eliminare questa scorta?')) {
-                          deleteSupplyMutation.mutate(supply.id);
+                        if (confirm('Rimuovere questa checklist dall\'appartamento?')) {
+                          removeChecklistMutation.mutate(apartmentChecklist.id);
                         }
                       }}
-                      className="text-red-600 hover:bg-red-50"
+                      className="text-red-600 hover:bg-red-50 flex-shrink-0"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Quantità:</span>
-                    <span className={`text-xl font-bold ${isLow ? 'text-orange-600' : 'text-teal-600'}`}>
-                      {supply.current_quantity} {supply.unit}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500 mt-1">
-                    Min: {supply.min_quantity} {supply.unit}
                   </div>
                 </CardContent>
               </Card>

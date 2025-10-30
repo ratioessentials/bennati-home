@@ -46,6 +46,8 @@ export default function Layout({ children, currentPageName }) {
     { name: "Dashboard", icon: LayoutDashboard, page: "Dashboard" },
     { name: "Strutture", icon: Building2, page: "Properties" },
     { name: "Appartamenti", icon: Home, page: "Apartments" },
+    { name: "Checklist", icon: ClipboardList, page: "AdminChecklists" },
+    { name: "Scorte", icon: Package, page: "AdminSupplies" },
     { name: "Operazioni", icon: Users, page: "Operators" },
   ];
 

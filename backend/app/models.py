@@ -51,8 +51,8 @@ class Apartment(Base):
     # Relazioni
     property = relationship("Property", back_populates="apartments")
     rooms = relationship("Room", back_populates="apartment", cascade="all, delete-orphan")
-    checklist_items = relationship("ChecklistItem", back_populates="apartment", cascade="all, delete-orphan")
-    supplies = relationship("Supply", back_populates="apartment", cascade="all, delete-orphan")
+    apartment_checklist_items = relationship("ApartmentChecklistItem", back_populates="apartment", cascade="all, delete-orphan")
+    apartment_supplies = relationship("ApartmentSupply", back_populates="apartment", cascade="all, delete-orphan")
     work_sessions = relationship("WorkSession", back_populates="apartment")
 
 
@@ -66,25 +66,38 @@ class Room(Base):
     
     # Relazioni
     apartment = relationship("Apartment", back_populates="rooms")
-    checklist_items = relationship("ChecklistItem", back_populates="room", cascade="all, delete-orphan")
 
 
 class ChecklistItem(Base):
+    """Checklist globali - non legate a un appartamento specifico"""
     __tablename__ = "checklist_items"
 
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=True)
-    apartment_id = Column(Integer, ForeignKey("apartments.id"), nullable=False)
-    room_id = Column(Integer, ForeignKey("rooms.id"), nullable=True)
+    room_name = Column(String, nullable=True)  # Nome stanza: 'Bagno', 'Cucina', ecc.
     is_mandatory = Column(Boolean, default=False)
     order = Column(Integer, default=0)
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relazioni
-    apartment = relationship("Apartment", back_populates="checklist_items")
-    room = relationship("Room", back_populates="checklist_items")
+    apartment_checklist_items = relationship("ApartmentChecklistItem", back_populates="checklist_item", cascade="all, delete-orphan")
     completions = relationship("ChecklistCompletion", back_populates="checklist_item", cascade="all, delete-orphan")
+
+
+class ApartmentChecklistItem(Base):
+    """Collegamento tra appartamenti e checklist - indica quali checklist servono per ogni appartamento"""
+    __tablename__ = "apartment_checklist_items"
+
+    id = Column(Integer, primary_key=True, index=True)
+    apartment_id = Column(Integer, ForeignKey("apartments.id"), nullable=False)
+    checklist_item_id = Column(Integer, ForeignKey("checklist_items.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relazioni
+    apartment = relationship("Apartment", back_populates="apartment_checklist_items")
+    checklist_item = relationship("ChecklistItem", back_populates="apartment_checklist_items")
 
 
 class WorkSession(Base):
@@ -121,22 +134,40 @@ class ChecklistCompletion(Base):
 
 
 class Supply(Base):
+    """Scorte globali - non legate a un appartamento specifico"""
     __tablename__ = "supplies"
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False)
-    apartment_id = Column(Integer, ForeignKey("apartments.id"), nullable=False)
-    quantity = Column(Integer, default=0)
-    min_quantity = Column(Integer, default=5)
+    total_quantity = Column(Integer, default=0)  # Quantità totale disponibile
     unit = Column(String, nullable=True)  # 'pz', 'kg', 'lt', ecc.
-    category = Column(String, nullable=True)  # 'cleaning', 'bathroom', 'kitchen', ecc.
+    category = Column(String, nullable=True)  # 'pulizia', 'igiene', 'cucina', 'bagno', 'altro'
+    room = Column(String, nullable=True)  # Camera dove viene usata: 'Bagno', 'Cucina', ecc.
+    amazon_link = Column(String, nullable=True)  # Link Amazon per riordino
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relazioni
-    apartment = relationship("Apartment", back_populates="supplies")
+    apartment_supplies = relationship("ApartmentSupply", back_populates="supply", cascade="all, delete-orphan")
     alerts = relationship("SupplyAlert", back_populates="supply", cascade="all, delete-orphan")
+
+
+class ApartmentSupply(Base):
+    """Collegamento tra appartamenti e scorte - indica quali scorte servono per ogni appartamento"""
+    __tablename__ = "apartment_supplies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    apartment_id = Column(Integer, ForeignKey("apartments.id"), nullable=False)
+    supply_id = Column(Integer, ForeignKey("supplies.id"), nullable=False)
+    required_quantity = Column(Integer, default=0)  # Quantità necessaria per questo appartamento
+    min_quantity = Column(Integer, default=1)  # Quantità minima per avviso scorta bassa
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relazioni
+    apartment = relationship("Apartment", back_populates="apartment_supplies")
+    supply = relationship("Supply", back_populates="apartment_supplies")
 
 
 class SupplyAlert(Base):
