@@ -134,6 +134,9 @@ class ChecklistItemBase(BaseModel):
     room_name: Optional[str] = None
     is_mandatory: bool = False
     order: int = 0
+    item_type: str = 'check'  # 'check', 'yes_no', 'number'
+    expected_number: Optional[int] = None  # Solo per item_type='number'
+    amazon_link: Optional[str] = None  # Solo per item_type='number'
 
 
 class ChecklistItemCreate(ChecklistItemBase):
@@ -146,6 +149,9 @@ class ChecklistItemUpdate(BaseModel):
     room_name: Optional[str] = None
     is_mandatory: Optional[bool] = None
     order: Optional[int] = None
+    item_type: Optional[str] = None
+    expected_number: Optional[int] = None
+    amazon_link: Optional[str] = None
 
 
 class ChecklistItem(ChecklistItemBase):
@@ -167,11 +173,12 @@ class ApartmentChecklistItemCreate(ApartmentChecklistItemBase):
 
 
 class ApartmentChecklistItemUpdate(BaseModel):
-    pass  # Per ora non ci sono campi modificabili
+    order: Optional[int] = None
 
 
 class ApartmentChecklistItem(ApartmentChecklistItemBase):
     id: int
+    order: int = 0
     created_at: datetime
     updated_at: datetime
 
@@ -217,6 +224,8 @@ class ChecklistCompletionBase(BaseModel):
     user_id: int
     work_session_id: Optional[int] = None
     notes: Optional[str] = None
+    value_number: Optional[int] = None  # Per item_type='number'
+    value_bool: Optional[bool] = None  # Per item_type='yes_no'
 
 
 class ChecklistCompletionCreate(ChecklistCompletionBase):

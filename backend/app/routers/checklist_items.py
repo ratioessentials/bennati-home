@@ -166,6 +166,29 @@ def add_checklist_to_apartment(
     return apartment_checklist
 
 
+@router.put("/apartment-checklist-items/{apartment_checklist_item_id}", response_model=schemas.ApartmentChecklistItem)
+def update_apartment_checklist_item(
+    apartment_checklist_item_id: int,
+    data: schemas.ApartmentChecklistItemUpdate,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.get_current_admin_user)
+):
+    """Aggiorna una checklist assegnata a un appartamento (es: ordine)"""
+    apartment_checklist = db.query(models.ApartmentChecklistItem).filter(
+        models.ApartmentChecklistItem.id == apartment_checklist_item_id
+    ).first()
+    
+    if not apartment_checklist:
+        raise HTTPException(status_code=404, detail="Apartment checklist item not found")
+    
+    for key, value in data.model_dump(exclude_unset=True).items():
+        setattr(apartment_checklist, key, value)
+    
+    db.commit()
+    db.refresh(apartment_checklist)
+    return apartment_checklist
+
+
 @router.delete("/apartment-checklist-items/{apartment_checklist_item_id}")
 def remove_checklist_from_apartment(
     apartment_checklist_item_id: int,

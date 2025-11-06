@@ -20,6 +20,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   Home, 
   Plus, 
@@ -33,7 +39,9 @@ import {
   Package,
   DoorOpen,
   AlertTriangle,
-  ExternalLink
+  ExternalLink,
+  MoreVertical,
+  GripVertical
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -386,6 +394,30 @@ export default function Apartments() {
                           </Badge>
                         </div>
                       </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreVertical className="w-4 h-4 text-gray-600" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleEdit(apartment)}>
+                            <Edit className="w-4 h-4 mr-2" />
+                            Modifica
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              if (confirm('Sei sicuro di voler eliminare questo appartamento e tutti i suoi dati?')) {
+                                deleteMutation.mutate(apartment.id);
+                              }
+                            }}
+                            className="text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Elimina
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   </CardHeader>
                   <CardContent className="p-6">
@@ -413,36 +445,15 @@ export default function Apartments() {
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleManage(apartment)}
-                        className="flex-1 bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700"
-                      >
-                        <Settings className="w-4 h-4 mr-1" />
-                        Gestisci
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(apartment)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (confirm('Sei sicuro di voler eliminare questo appartamento e tutti i suoi dati?')) {
-                            deleteMutation.mutate(apartment.id);
-                          }
-                        }}
-                        className="text-red-600 border-red-200 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => handleManage(apartment)}
+                      className="w-full bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700"
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Gestisci
+                    </Button>
                   </CardContent>
                 </Card>
               );
@@ -638,9 +649,8 @@ export default function Apartments() {
 
 // Componente per la gestione completa dell'appartamento
 function ManageApartmentDialog({ apartment, open, onOpenChange, allRooms, allChecklists, queryClient }) {
-  const [activeTab, setActiveTab] = useState("rooms");
+  const [activeTab, setActiveTab] = useState("checklist");
   
-  const apartmentRooms = allRooms.filter(r => r.apartment_id === apartment.id);
   const apartmentChecklists = allChecklists.filter(c => c.apartment_id === apartment.id);
   
   // Carica scorte assegnate dinamicamente
@@ -652,7 +662,7 @@ function ManageApartmentDialog({ apartment, open, onOpenChange, allRooms, allChe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-7xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="w-5 h-5 text-teal-600" />
@@ -661,11 +671,7 @@ function ManageApartmentDialog({ apartment, open, onOpenChange, allRooms, allChe
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="rooms" className="flex items-center gap-2">
-              <DoorOpen className="w-4 h-4" />
-              Stanze ({apartmentRooms.length})
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="checklist" className="flex items-center gap-2">
               <ClipboardList className="w-4 h-4" />
               Checklist ({apartmentChecklists.length})
@@ -675,14 +681,6 @@ function ManageApartmentDialog({ apartment, open, onOpenChange, allRooms, allChe
               Scorte ({apartmentSupplies.length})
             </TabsTrigger>
           </TabsList>
-
-          <TabsContent value="rooms" className="mt-6">
-            <RoomsManager 
-              apartmentId={apartment.id} 
-              rooms={apartmentRooms}
-              queryClient={queryClient}
-            />
-          </TabsContent>
 
           <TabsContent value="checklist" className="mt-6">
             <ChecklistManager 
@@ -891,7 +889,7 @@ function SuppliesManager({ apartmentId, queryClient }) {
           {selectedSupply && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label className="text-xs">Quantità Disponibile</Label>
+                <Label className="text-xs">Totale disponibile</Label>
                 <Input
                   type="number"
                   min="0"
@@ -901,7 +899,7 @@ function SuppliesManager({ apartmentId, queryClient }) {
                 />
               </div>
               <div>
-                <Label className="text-xs">Quantità Minima</Label>
+                <Label className="text-xs">Minimo richiesto</Label>
                 <Input
                   type="number"
                   min="1"
@@ -959,45 +957,51 @@ function SuppliesManager({ apartmentId, queryClient }) {
                 <CardContent className="p-4">
                   <div className="flex items-center gap-4">
                     {/* Nome Scorta */}
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 flex items-center gap-3">
+                      <Package className="w-5 h-5 text-teal-600 flex-shrink-0" />
                       <p className="font-medium text-gray-900">{supply.name}</p>
-                      <p className="text-xs text-gray-500">{supply.unit}</p>
                     </div>
                     
                     {/* Disponibilità Attuali */}
-                    <div className="w-28">
-                      <Label className="text-xs text-gray-600 mb-1 block">Disponibile</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={apartmentSupply.required_quantity}
-                        onChange={(e) => {
-                          const newValue = parseInt(e.target.value) || 0;
-                          updateSupplyMutation.mutate({
-                            id: apartmentSupply.id,
-                            data: { required_quantity: newValue }
-                          });
-                        }}
-                        className="h-9 text-center"
-                      />
+                    <div className="w-40">
+                      <Label className="text-xs text-gray-600 mb-1 block">Totale disponibile</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={apartmentSupply.required_quantity}
+                          onChange={(e) => {
+                            const newValue = parseInt(e.target.value) || 0;
+                            updateSupplyMutation.mutate({
+                              id: apartmentSupply.id,
+                              data: { required_quantity: newValue }
+                            });
+                          }}
+                          className="h-9 text-center flex-1"
+                        />
+                        <span className="text-sm text-gray-600 w-8">{supply.unit}</span>
+                      </div>
                     </div>
                     
                     {/* Minime Richieste */}
-                    <div className="w-28">
-                      <Label className="text-xs text-gray-600 mb-1 block">Minima</Label>
-                      <Input
-                        type="number"
-                        min="0"
-                        value={apartmentSupply.min_quantity}
-                        onChange={(e) => {
-                          const newValue = parseInt(e.target.value) || 0;
-                          updateSupplyMutation.mutate({
-                            id: apartmentSupply.id,
-                            data: { min_quantity: newValue }
-                          });
-                        }}
-                        className="h-9 text-center"
-                      />
+                    <div className="w-40">
+                      <Label className="text-xs text-gray-600 mb-1 block">Minimo richiesto</Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min="0"
+                          value={apartmentSupply.min_quantity}
+                          onChange={(e) => {
+                            const newValue = parseInt(e.target.value) || 0;
+                            updateSupplyMutation.mutate({
+                              id: apartmentSupply.id,
+                              data: { min_quantity: newValue }
+                            });
+                          }}
+                          className="h-9 text-center flex-1"
+                        />
+                        <span className="text-sm text-gray-600 w-8">{supply.unit}</span>
+                      </div>
                     </div>
                     
                     {/* Elimina */}
@@ -1027,6 +1031,8 @@ function SuppliesManager({ apartmentId, queryClient }) {
 // Componente per gestire le checklist dell'appartamento
 function ChecklistManager({ apartmentId, queryClient }) {
   const [selectedChecklist, setSelectedChecklist] = useState("");
+  const [draggedItem, setDraggedItem] = useState(null);
+  const [orderedChecklists, setOrderedChecklists] = useState([]);
   
   // Carica checklist globali
   const { data: globalChecklists = [] } = useQuery({
@@ -1039,6 +1045,16 @@ function ChecklistManager({ apartmentId, queryClient }) {
     queryKey: ['apartment-checklists', apartmentId],
     queryFn: () => apiClient.getApartmentChecklists(apartmentId),
   });
+
+  // Aggiorna l'ordine locale quando cambiano le checklist
+  React.useEffect(() => {
+    if (apartmentChecklists.length > 0) {
+      const sorted = [...apartmentChecklists].sort((a, b) => (a.order || 0) - (b.order || 0));
+      setOrderedChecklists(sorted);
+    } else {
+      setOrderedChecklists([]);
+    }
+  }, [apartmentChecklists]);
   
   const assignChecklistMutation = useMutation({
     mutationFn: (data) => apiClient.addChecklistToApartment(apartmentId, data),
@@ -1055,15 +1071,52 @@ function ChecklistManager({ apartmentId, queryClient }) {
     },
   });
 
+  const updateOrderMutation = useMutation({
+    mutationFn: async (newOrder) => {
+      // Aggiorna l'ordine di tutte le checklist
+      for (let i = 0; i < newOrder.length; i++) {
+        await apiClient.updateApartmentChecklistOrder(newOrder[i].id, i);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apartment-checklists', apartmentId] });
+    },
+  });
+
+  const handleDragStart = (e, index) => {
+    setDraggedItem(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e, index) => {
+    e.preventDefault();
+    if (draggedItem === null || draggedItem === index) return;
+
+    const newOrder = [...orderedChecklists];
+    const draggedItemContent = newOrder[draggedItem];
+    newOrder.splice(draggedItem, 1);
+    newOrder.splice(index, 0, draggedItemContent);
+
+    setDraggedItem(index);
+    setOrderedChecklists(newOrder);
+  };
+
+  const handleDragEnd = () => {
+    if (draggedItem !== null) {
+      updateOrderMutation.mutate(orderedChecklists);
+    }
+    setDraggedItem(null);
+  };
+
   // Checklist globali non ancora assegnate a questo appartamento
   const assignedChecklistIds = apartmentChecklists.map(ac => ac.checklist_item_id);
   const availableChecklists = globalChecklists.filter(c => !assignedChecklistIds.includes(c.id));
 
   const roomColors = {
-    bagno: "bg-blue-100 text-blue-700",
-    "camera da letto": "bg-purple-100 text-purple-700",
-    salotto: "bg-teal-100 text-teal-700",
-    ingresso: "bg-orange-100 text-orange-700",
+    Bagno: "bg-blue-100 text-blue-700",
+    "Camera da Letto": "bg-purple-100 text-purple-700",
+    Soggiorno: "bg-teal-100 text-teal-700",
+    Cucina: "bg-orange-100 text-orange-700",
     generale: "bg-gray-100 text-gray-700"
   };
 
@@ -1124,20 +1177,33 @@ function ChecklistManager({ apartmentId, queryClient }) {
         <div className="text-center py-8">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-teal-600 mx-auto"></div>
         </div>
-      ) : apartmentChecklists.length === 0 ? (
+      ) : orderedChecklists.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           <ClipboardList className="w-12 h-12 mx-auto mb-2 text-gray-300" />
           <p>Nessuna checklist assegnata a questo appartamento</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {apartmentChecklists.map((apartmentChecklist) => {
+          {orderedChecklists.map((apartmentChecklist, index) => {
             const checklist = apartmentChecklist.checklist_item;
+            const isDragging = draggedItem === index;
             
             return (
-              <Card key={apartmentChecklist.id} className="border border-gray-200">
+              <Card 
+                key={apartmentChecklist.id} 
+                className={`border border-gray-200 transition-all ${isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md'}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDragEnd={handleDragEnd}
+              >
                 <CardContent className="p-4">
-                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    {/* Drag Handle */}
+                    <div className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600">
+                      <GripVertical className="w-5 h-5" />
+                    </div>
+                    
                     {/* Nome Checklist */}
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-gray-900">{checklist.title}</p>
@@ -1148,7 +1214,7 @@ function ChecklistManager({ apartmentId, queryClient }) {
                     
                     {/* Badge Stanza */}
                     {checklist.room_name && (
-                      <Badge className={roomColors[checklist.room_name]}>
+                      <Badge className={roomColors[checklist.room_name] || "bg-gray-100 text-gray-700"}>
                         {checklist.room_name}
                       </Badge>
                     )}

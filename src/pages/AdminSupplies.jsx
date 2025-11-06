@@ -28,7 +28,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Package, Plus, Edit, Trash2, ExternalLink, AlertTriangle, Home, ChevronDown, ChevronUp, ShoppingCart } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Package, Plus, Edit, Trash2, ExternalLink, AlertTriangle, Home, ChevronDown, ChevronUp, ShoppingCart, MoreVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -180,12 +186,21 @@ export default function AdminSupplies() {
     : supplies.filter(supply => supply.category === selectedCategory)
   ).sort((a, b) => a.name.localeCompare(b.name));
 
-  const categoryColors = {
-    bagno: "bg-blue-100 text-blue-700",
-    "camera da letto": "bg-purple-100 text-purple-700",
-    salotto: "bg-teal-100 text-teal-700",
-    ingresso: "bg-orange-100 text-orange-700",
-    generale: "bg-gray-100 text-gray-700"
+  const getCategoryColor = (category) => {
+    switch(category) {
+      case 'bagno':
+        return 'bg-blue-100 text-blue-700';
+      case 'camera da letto':
+        return 'bg-purple-100 text-purple-700';
+      case 'salotto':
+        return 'bg-teal-100 text-teal-700';
+      case 'ingresso':
+        return 'bg-orange-100 text-orange-700';
+      case 'generale':
+        return 'bg-gray-100 text-gray-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
+    }
   };
 
   return (
@@ -301,7 +316,7 @@ export default function AdminSupplies() {
                             )}
                           </TableCell>
                           <TableCell className="py-4 px-6">
-                            <Badge className={categoryColors[supply.category]}>
+                            <Badge className={getCategoryColor(supply.category)}>
                               {supply.category}
                             </Badge>
                           </TableCell>
@@ -325,38 +340,53 @@ export default function AdminSupplies() {
                                 className={`gap-1 ${
                                   supply.amazon_link 
                                     ? 'bg-orange-500 hover:bg-orange-600 text-white border-orange-600 hover:border-orange-700' 
-                                    : 'text-gray-400 cursor-not-allowed'
+                                    : 'bg-gray-200 text-gray-400 border-gray-300 cursor-not-allowed'
                                 }`}
                                 title={supply.amazon_link ? 'Acquista su Amazon' : 'Link Amazon non disponibile'}
                               >
                                 <ShoppingCart className="w-4 h-4" />
                                 Acquista
                               </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEdit(supply)}
-                                className="hover:bg-teal-50"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  if (assignments.length > 0) {
-                                    if (!confirm(`Questa scorta è assegnata a ${assignments.length} appartament${assignments.length > 1 ? 'i' : 'o'}. Sei sicuro di volerla eliminare?`)) {
-                                      return;
-                                    }
-                                  } else if (!confirm('Sei sicuro di voler eliminare questa scorta?')) {
-                                    return;
-                                  }
-                                  deleteMutation.mutate(supply.id);
-                                }}
-                                className="text-red-600 border-red-200 hover:bg-red-50"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0"
+                                  >
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEdit(supply);
+                                    }}
+                                    className="cursor-pointer"
+                                  >
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    Modifica
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (assignments.length > 0) {
+                                        if (!confirm(`Questa scorta è assegnata a ${assignments.length} appartament${assignments.length > 1 ? 'i' : 'o'}. Sei sicuro di volerla eliminare?`)) {
+                                          return;
+                                        }
+                                      } else if (!confirm('Sei sicuro di voler eliminare questa scorta?')) {
+                                        return;
+                                      }
+                                      deleteMutation.mutate(supply.id);
+                                    }}
+                                    className="text-red-600 focus:text-red-600 cursor-pointer"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Elimina
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>

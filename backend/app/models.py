@@ -78,6 +78,14 @@ class ChecklistItem(Base):
     room_name = Column(String, nullable=True)  # Nome stanza: 'Bagno', 'Cucina', ecc.
     is_mandatory = Column(Boolean, default=False)
     order = Column(Integer, default=0)
+    
+    # Tipologia: 'check', 'yes_no', 'number'
+    item_type = Column(String, default='check', nullable=False)
+    
+    # Campi per tipo 'number'
+    expected_number = Column(Integer, nullable=True)  # Valore numerico previsto
+    amazon_link = Column(String, nullable=True)  # Link Amazon per acquisto prodotto
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     
     # Relazioni
@@ -92,6 +100,7 @@ class ApartmentChecklistItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     apartment_id = Column(Integer, ForeignKey("apartments.id"), nullable=False)
     checklist_item_id = Column(Integer, ForeignKey("checklist_items.id"), nullable=False)
+    order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -126,6 +135,10 @@ class ChecklistCompletion(Base):
     work_session_id = Column(Integer, ForeignKey("work_sessions.id"), nullable=True)
     completed_at = Column(DateTime, default=datetime.utcnow)
     notes = Column(Text, nullable=True)
+    
+    # Valori per i diversi tipi di checklist
+    value_number = Column(Integer, nullable=True)  # Per tipo 'number'
+    value_bool = Column(Boolean, nullable=True)  # Per tipo 'yes_no'
     
     # Relazioni
     checklist_item = relationship("ChecklistItem", back_populates="completions")

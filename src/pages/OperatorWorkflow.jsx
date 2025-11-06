@@ -23,10 +23,12 @@ import {
   ChevronRight,
   ChevronLeft,
   Sparkles,
-  Send
+  Send,
+  ExternalLink
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
 
 export default function OperatorWorkflow() {
   const queryClient = useQueryClient();
@@ -37,6 +39,7 @@ export default function OperatorWorkflow() {
   const [workSessionId, setWorkSessionId] = useState(null);
   const [finalNotes, setFinalNotes] = useState("");
   const [supplyUpdates, setSupplyUpdates] = useState({});
+  const [checklistValues, setChecklistValues] = useState({}); // Per salvare i valori di yes_no e number
 
   React.useEffect(() => {
     apiClient.getCurrentUser().then(setUser).catch(() => {});
@@ -131,8 +134,8 @@ export default function OperatorWorkflow() {
   });
 
   const toggleCompletionMutation = useMutation({
-    mutationFn: async ({ itemId, completed }) => {
-      console.log('🔘 Toggle mutation called:', { itemId, completed, userId: user?.id, workSessionId });
+    mutationFn: async ({ itemId, completed, item_type, value_bool, value_number }) => {
+      console.log('🔘 Toggle mutation called:', { itemId, completed, userId: user?.id, workSessionId, item_type, value_bool, value_number });
       
       if (completed) {
         const completion = completions.find(c => c.checklist_item_id === itemId);
@@ -145,7 +148,9 @@ export default function OperatorWorkflow() {
         await apiClient.createCompletion({
           checklist_item_id: itemId,
           user_id: user.id,
-          work_session_id: workSessionId
+          work_session_id: workSessionId,
+          value_bool: value_bool,
+          value_number: value_number
         });
       }
     },
@@ -220,11 +225,23 @@ export default function OperatorWorkflow() {
     return completions.some(c => c.checklist_item_id === itemId);
   };
 
-  const handleToggle = (itemId) => {
-    console.log('🖱️ handleToggle clicked:', { itemId, isPending: toggleCompletionMutation.isPending });
+  const handleToggle = (itemId, item_type = 'check', value_bool = null, value_number = null) => {
+    console.log('🖱️ handleToggle clicked:', { itemId, isPending: toggleCompletionMutation.isPending, item_type, value_bool, value_number });
     const completed = isCompleted(itemId);
     console.log('🖱️ isCompleted:', completed);
-    toggleCompletionMutation.mutate({ itemId, completed });
+    toggleCompletionMutation.mutate({ itemId, completed, item_type, value_bool, value_number });
+  };
+  
+  const getChecklistValue = (itemId, item_type) => {
+    if (checklistValues[itemId] !== undefined) {
+      return checklistValues[itemId];
+    }
+    // Valore di default in base al tipo
+    return item_type === 'yes_no' ? false : null;
+  };
+  
+  const setChecklistValue = (itemId, value) => {
+    setChecklistValues({ ...checklistValues, [itemId]: value });
   };
 
   const completedCount = checklistItems.filter(item => isCompleted(item.id)).length;
@@ -443,6 +460,9 @@ export default function OperatorWorkflow() {
                     {/* Checklist Items della Stanza */}
                     {items.map((item) => {
                       const completed = isCompleted(item.id);
+                      const itemType = item.item_type || 'check';
+                      const currentValue = getChecklistValue(item.id, itemType);
+                      
                       return (
                         <Card
                           key={item.id}
@@ -451,38 +471,132 @@ export default function OperatorWorkflow() {
                           }`}
                         >
                           <CardContent className="p-4">
-                            <div className="flex items-start gap-4">
-                              <button
-                                onClick={() => handleToggle(item.id)}
-                                className="flex-shrink-0 mt-1 transition-transform active:scale-90"
-                                disabled={toggleCompletionMutation.isPending}
-                              >
-                                {completed ? (
-                                  <div className="relative">
-                                    <CheckCircle2 className="w-10 h-10 text-green-600" />
-                                    <div className="absolute inset-0 animate-ping">
-                                      <CheckCircle2 className="w-10 h-10 text-green-400 opacity-75" />
+                            {/* TIPO: CHECK (Semplice Check) */}
+                            {itemType === 'check' && (
+                              <div className="flex items-start gap-4">
+                                <button
+                                  onClick={() => handleToggle(item.id, 'check')}
+                                  className="flex-shrink-0 mt-1 transition-transform active:scale-90"
+                                  disabled={toggleCompletionMutation.isPending}
+                                >
+                                  {completed ? (
+                                    <div className="relative">
+                                      <CheckCircle2 className="w-10 h-10 text-green-600" />
+                                      <div className="absolute inset-0 animate-ping">
+                                        <CheckCircle2 className="w-10 h-10 text-green-400 opacity-75" />
+                                      </div>
                                     </div>
-                                  </div>
-                                ) : (
-                                  <Circle className="w-10 h-10 text-gray-300 hover:text-teal-600 transition-colors" />
-                                )}
-                              </button>
-                              <div className="flex-1">
-                                <p className={`text-lg font-bold mb-1 ${
-                                  completed ? 'line-through text-gray-500' : 'text-gray-900'
-                                }`}>
-                                  {item.title}
-                                </p>
-                                {item.description && (
-                                  <p className={`text-sm ${
-                                    completed ? 'text-gray-400' : 'text-gray-600'
+                                  ) : (
+                                    <Circle className="w-10 h-10 text-gray-300 hover:text-teal-600 transition-colors" />
+                                  )}
+                                </button>
+                                <div className="flex-1">
+                                  <p className={`text-lg font-bold mb-1 ${
+                                    completed ? 'line-through text-gray-500' : 'text-gray-900'
                                   }`}>
-                                    {item.description}
+                                    {item.title}
                                   </p>
-                                )}
+                                  {item.description && (
+                                    <p className={`text-sm ${
+                                      completed ? 'text-gray-400' : 'text-gray-600'
+                                    }`}>
+                                      {item.description}
+                                    </p>
+                                  )}
+                                </div>
                               </div>
-                            </div>
+                            )}
+                            
+                            {/* TIPO: YES_NO (Sì/No con Toggle) */}
+                            {itemType === 'yes_no' && (
+                              <div className="space-y-3">
+                                <div className="flex items-start gap-4">
+                                  <div className="flex-1">
+                                    <p className="text-lg font-bold mb-1 text-gray-900">
+                                      {item.title}
+                                    </p>
+                                    {item.description && (
+                                      <p className="text-sm text-gray-600">
+                                        {item.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
+                                  <Label htmlFor={`toggle-${item.id}`} className="text-base font-semibold">
+                                    {currentValue ? 'Sì' : 'No'}
+                                  </Label>
+                                  <Switch
+                                    id={`toggle-${item.id}`}
+                                    checked={currentValue}
+                                    onCheckedChange={(checked) => {
+                                      setChecklistValue(item.id, checked);
+                                      handleToggle(item.id, 'yes_no', checked, null);
+                                    }}
+                                    className="data-[state=checked]:bg-green-600"
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* TIPO: NUMBER (Inserimento Numero) */}
+                            {itemType === 'number' && (
+                              <div className="space-y-3">
+                                <div className="flex items-start gap-4">
+                                  <div className="flex-1">
+                                    <p className="text-lg font-bold mb-1 text-gray-900">
+                                      {item.title}
+                                    </p>
+                                    {item.description && (
+                                      <p className="text-sm text-gray-600">
+                                        {item.description}
+                                      </p>
+                                    )}
+                                    {item.expected_number && (
+                                      <p className="text-sm text-gray-500 mt-1">
+                                        Numero previsto: <span className="font-semibold">{item.expected_number}</span>
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                                  <Label htmlFor={`number-${item.id}`} className="text-base font-semibold">
+                                    Numero Attuale
+                                  </Label>
+                                  <Input
+                                    id={`number-${item.id}`}
+                                    type="number"
+                                    value={currentValue || ''}
+                                    onChange={(e) => {
+                                      const value = parseInt(e.target.value) || null;
+                                      setChecklistValue(item.id, value);
+                                    }}
+                                    onBlur={(e) => {
+                                      const value = parseInt(e.target.value) || null;
+                                      handleToggle(item.id, 'number', null, value);
+                                    }}
+                                    placeholder="Inserisci numero..."
+                                    className="text-center text-2xl font-bold h-14"
+                                  />
+                                  {item.expected_number && currentValue < item.expected_number && item.amazon_link && (
+                                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                      <p className="text-sm text-orange-800 font-medium mb-2">
+                                        ⚠️ Quantità inferiore al previsto
+                                      </p>
+                                      <a
+                                        href={item.amazon_link}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
+                                      >
+                                        <ExternalLink className="w-4 h-4" />
+                                        Acquista su Amazon
+                                      </a>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
                           </CardContent>
                         </Card>
                       );

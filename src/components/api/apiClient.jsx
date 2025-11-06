@@ -1,7 +1,7 @@
 // API Client per il backend Python
 // L'URL viene preso dalla variabile d'ambiente o usa localhost come default
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000') + '/api';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8080') + '/api';
 
 class ApiClient {
   constructor() {
@@ -232,6 +232,13 @@ class ApiClient {
     return this.request(`/checklist-items/apartment/${apartmentId}/checklist-items`, {
       method: 'POST',
       body: JSON.stringify(data),
+    });
+  }
+
+  async updateApartmentChecklistOrder(apartmentChecklistItemId, order) {
+    return this.request(`/checklist-items/apartment-checklist-items/${apartmentChecklistItemId}`, {
+      method: 'PUT',
+      body: JSON.stringify({ order }),
     });
   }
 

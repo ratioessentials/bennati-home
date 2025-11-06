@@ -21,6 +21,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
   Table,
   TableBody,
   TableCell,
@@ -28,7 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { CheckSquare, Plus, Edit, Trash2, Home } from "lucide-react";
+import { CheckSquare, Plus, Edit, Trash2, Home, MoreVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -37,13 +44,17 @@ export default function AdminChecklists() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingChecklist, setEditingChecklist] = useState(null);
   const [selectedRoom, setSelectedRoom] = useState("all");
+  const [selectedTab, setSelectedTab] = useState("all");
   const [expandedChecklists, setExpandedChecklists] = useState({});
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     room_name: "",
     is_mandatory: false,
-    order: 0
+    order: 0,
+    item_type: "check",
+    expected_number: null,
+    amazon_link: ""
   });
 
   const { data: checklists, isLoading } = useQuery({
@@ -106,7 +117,10 @@ export default function AdminChecklists() {
       description: "",
       room_name: "",
       is_mandatory: false,
-      order: 0
+      order: 0,
+      item_type: "check",
+      expected_number: null,
+      amazon_link: ""
     });
     setEditingChecklist(null);
   };
@@ -118,7 +132,10 @@ export default function AdminChecklists() {
       description: checklist.description || "",
       room_name: checklist.room_name || "",
       is_mandatory: checklist.is_mandatory,
-      order: checklist.order
+      order: checklist.order,
+      item_type: checklist.item_type || "check",
+      expected_number: checklist.expected_number || null,
+      amazon_link: checklist.amazon_link || ""
     });
     setDialogOpen(true);
   };
@@ -157,20 +174,43 @@ export default function AdminChecklists() {
     return assignments;
   };
 
-  const filteredChecklists = (selectedRoom === "all"
-    ? checklists
-    : checklists.filter(checklist => checklist.room_name === selectedRoom)
-  ).sort((a, b) => {
-    if (a.order !== b.order) return a.order - b.order;
-    return a.title.localeCompare(b.title);
-  });
+  const getFilteredChecklists = (itemType) => {
+    let filtered = checklists;
+    
+    // Filtra per stanza
+    if (selectedRoom !== "all") {
+      filtered = filtered.filter(checklist => checklist.room_name === selectedRoom);
+    }
+    
+    // Filtra per tipologia
+    if (itemType !== "all") {
+      filtered = filtered.filter(checklist => (checklist.item_type || 'check') === itemType);
+    }
+    
+    // Ordina
+    return filtered.sort((a, b) => {
+      if (a.order !== b.order) return a.order - b.order;
+      return a.title.localeCompare(b.title);
+    });
+  };
+  
+  const filteredChecklists = getFilteredChecklists(selectedTab);
 
-  const roomColors = {
-    bagno: "bg-blue-100 text-blue-700",
-    "camera da letto": "bg-purple-100 text-purple-700",
-    salotto: "bg-teal-100 text-teal-700",
-    ingresso: "bg-orange-100 text-orange-700",
-    generale: "bg-gray-100 text-gray-700"
+  const getCategoryColor = (category) => {
+    switch(category) {
+      case 'bagno':
+        return 'bg-blue-100 text-blue-700';
+      case 'camera da letto':
+        return 'bg-purple-100 text-purple-700';
+      case 'salotto':
+        return 'bg-teal-100 text-teal-700';
+      case 'ingresso':
+        return 'bg-orange-100 text-orange-700';
+      case 'generale':
+        return 'bg-gray-100 text-gray-700';
+      default:
+        return 'bg-gray-100 text-gray-700';
+    }
   };
 
   return (
@@ -214,28 +254,56 @@ export default function AdminChecklists() {
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-lg overflow-hidden">
-          <div className="overflow-x-auto">
-            <Table>
+        <Tabs defaultValue="all" value={selectedTab} onValueChange={setSelectedTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-4 mb-6 h-auto">
+            <TabsTrigger value="all" className="text-base py-3">
+              Tutte
+            </TabsTrigger>
+            <TabsTrigger value="check" className="text-base py-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                Checklist
+              </div>
+            </TabsTrigger>
+            <TabsTrigger value="yes_no" className="text-base py-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                Sì/No
+              </div>
+            </TabsTrigger>
+            <TabsTrigger value="number" className="text-base py-3">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                Dotazioni
+              </div>
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value={selectedTab} className="mt-0">
+            <Card className="border-none shadow-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <Table>
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-teal-50 to-cyan-50 hover:from-teal-50 hover:to-cyan-50">
-                  <TableHead className="font-bold text-gray-900 py-4 px-6">Titolo</TableHead>
-                  <TableHead className="font-bold text-gray-900 py-4 px-6">Stanza</TableHead>
-                  <TableHead className="font-bold text-gray-900 py-4 px-6 text-right">Azioni</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6 w-[40%]">Titolo</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6 w-[20%]">Stanza</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6 w-[20%]">Tipologia</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6 w-[20%] text-right">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array(5).fill(0).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-40" /></TableCell>
-                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-24" /></TableCell>
-                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-20" /></TableCell>
+                      <TableCell className="py-4 px-6 w-[40%]"><Skeleton className="h-6 w-40" /></TableCell>
+                      <TableCell className="py-4 px-6 w-[20%]"><Skeleton className="h-6 w-24" /></TableCell>
+                      <TableCell className="py-4 px-6 w-[20%]"><Skeleton className="h-6 w-24" /></TableCell>
+                      <TableCell className="py-4 px-6 w-[20%]"><Skeleton className="h-6 w-20" /></TableCell>
                     </TableRow>
                   ))
                 ) : filteredChecklists.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={3} className="text-center py-12 px-6">
+                    <TableCell colSpan={4} className="text-center py-12 px-6">
                       <CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
                       <p className="text-gray-500 text-lg mb-2">
                         Nessuna checklist registrata
@@ -256,7 +324,7 @@ export default function AdminChecklists() {
                           className="cursor-pointer hover:bg-teal-50/50 transition-colors"
                           onClick={() => toggleExpanded(checklist.id)}
                         >
-                          <TableCell className="font-medium py-4 px-6">
+                          <TableCell className="font-medium py-4 px-6 w-[40%]">
                             <div className="flex items-center gap-3">
                               <CheckSquare className="w-4 h-4 text-teal-600 flex-shrink-0" />
                               <span>{checklist.title}</span>
@@ -268,47 +336,68 @@ export default function AdminChecklists() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="py-4 px-6">
+                          <TableCell className="py-4 px-6 w-[20%]">
                             {checklist.room_name && (
-                              <Badge className={roomColors[checklist.room_name]}>
+                              <Badge className={getCategoryColor(checklist.room_name)}>
                                 {checklist.room_name}
                               </Badge>
                             )}
                           </TableCell>
-                          <TableCell className="py-4 px-6 text-right">
-                            <div className="flex gap-2 justify-end" onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleEdit(checklist)}
-                                className="hover:bg-teal-50"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  if (assignments.length > 0) {
-                                    if (!confirm(`Questa checklist è assegnata a ${assignments.length} appartament${assignments.length > 1 ? 'i' : 'o'}. Sei sicuro di volerla eliminare?`)) {
-                                      return;
-                                    }
-                                  } else if (!confirm('Sei sicuro di voler eliminare questa checklist?')) {
-                                    return;
-                                  }
-                                  deleteMutation.mutate(checklist.id);
-                                }}
-                                className="text-red-600 border-red-200 hover:bg-red-50"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </Button>
+                          <TableCell className="py-4 px-6 w-[20%]">
+                            {checklist.item_type === 'check' && (
+                              <Badge className="bg-gray-100 text-gray-700">
+                                Checklist
+                              </Badge>
+                            )}
+                            {checklist.item_type === 'yes_no' && (
+                              <Badge className="bg-green-100 text-green-700">
+                                Sì/No
+                              </Badge>
+                            )}
+                            {checklist.item_type === 'number' && (
+                              <Badge className="bg-blue-100 text-blue-700">
+                                Dotazioni
+                              </Badge>
+                            )}
+                          </TableCell>
+                          <TableCell className="py-4 px-6 w-[20%] text-right">
+                            <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-8 w-8">
+                                    <MoreVertical className="w-4 h-4 text-gray-600" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleEdit(checklist)}>
+                                    <Edit className="w-4 h-4 mr-2" />
+                                    Modifica
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => {
+                                      if (assignments.length > 0) {
+                                        if (!confirm(`Questa checklist è assegnata a ${assignments.length} appartament${assignments.length > 1 ? 'i' : 'o'}. Sei sicuro di volerla eliminare?`)) {
+                                          return;
+                                        }
+                                      } else if (!confirm('Sei sicuro di voler eliminare questa checklist?')) {
+                                        return;
+                                      }
+                                      deleteMutation.mutate(checklist.id);
+                                    }}
+                                    className="text-red-600"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" />
+                                    Elimina
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </div>
                           </TableCell>
                         </TableRow>
                         {/* Accordion Row */}
                         {isExpanded && assignments.length > 0 && (
                           <TableRow className="bg-gray-50">
-                            <TableCell colSpan={3} className="p-0">
+                            <TableCell colSpan={4} className="p-0">
                               <div className="p-6 space-y-3">
                                 <div className="flex items-center gap-2 mb-4">
                                   <Home className="w-5 h-5 text-teal-600" />
@@ -337,9 +426,11 @@ export default function AdminChecklists() {
                   })
                 )}
               </TableBody>
-            </Table>
-          </div>
-        </Card>
+                </Table>
+              </div>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
@@ -388,6 +479,50 @@ export default function AdminChecklists() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label htmlFor="item_type">Tipologia *</Label>
+                <Select
+                  value={formData.item_type}
+                  onValueChange={(value) => setFormData({ ...formData, item_type: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="check">Checklist</SelectItem>
+                    <SelectItem value="yes_no">Sì/No</SelectItem>
+                    <SelectItem value="number">Dotazioni</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {formData.item_type === "number" && (
+                <>
+                  <div>
+                    <Label htmlFor="expected_number">Numero Previsto *</Label>
+                    <Input
+                      id="expected_number"
+                      type="number"
+                      value={formData.expected_number || ""}
+                      onChange={(e) => setFormData({ ...formData, expected_number: parseInt(e.target.value) || null })}
+                      placeholder="es: 2 (numero di asciugamani previsti)"
+                      required={formData.item_type === "number"}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="amazon_link">Link Amazon (opzionale)</Label>
+                    <Input
+                      id="amazon_link"
+                      type="url"
+                      value={formData.amazon_link}
+                      onChange={(e) => setFormData({ ...formData, amazon_link: e.target.value })}
+                      placeholder="https://www.amazon.it/..."
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Link per acquistare il prodotto se mancante
+                    </p>
+                  </div>
+                </>
+              )}
               <DialogFooter>
                 <Button
                   type="button"

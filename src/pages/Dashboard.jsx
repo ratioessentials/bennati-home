@@ -1,7 +1,7 @@
 import React from "react";
 import { apiClient } from "@/components/api/apiClient";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { 
   Home, 
   Building2, 
@@ -10,7 +10,12 @@ import {
   AlertTriangle,
   Package,
   TrendingUp,
-  Calendar
+  Calendar,
+  ClipboardList,
+  Clock,
+  MapPin,
+  ShoppingCart,
+  ExternalLink
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -38,31 +43,70 @@ export default function Dashboard() {
     queryFn: () => apiClient.getCompletions({ limit: 50 }),
   });
 
-  const { data: supplyAlerts = [] } = useQuery({
+  const { data: supplyAlerts = [], isLoading: loadingAlerts } = useQuery({
     queryKey: ['supply-alerts-dashboard'],
-    queryFn: () => apiClient.getSupplyAlerts({ resolved: false }),
+    queryFn: () => apiClient.getSupplyAlerts({ is_resolved: false }),
   });
 
-  // Calcola statistiche - conta solo completions con work_session_id (operazioni valide)
-  const totalCompletionsToday = completions.filter(c => {
-    if (!c.work_session_id) return false; // Escludi completions senza work session
-    const completionDate = new Date(c.completed_at);
-    const today = new Date();
-    return completionDate.toDateString() === today.toDateString();
-  }).length;
+  const { data: workSessions = [], isLoading: loadingSessions } = useQuery({
+    queryKey: ['work-sessions-dashboard'],
+    queryFn: () => apiClient.getWorkSessions({ limit: 5 }),
+  });
 
-  const apartmentsWithRecentCleaning = apartments.filter(apt => {
-    const aptCompletions = completions.filter(c => c.apartment_id === apt.id);
-    if (aptCompletions.length === 0) return false;
-    
-    const lastCleaning = new Date(aptCompletions[0].completed_at);
-    const daysSince = Math.floor((new Date() - lastCleaning) / (1000 * 60 * 60 * 24));
-    return daysSince <= 7;
-  }).length;
+  const { data: allSupplies = [] } = useQuery({
+    queryKey: ['supplies-all'],
+    queryFn: () => apiClient.getSupplies(),
+  });
+
+  const { data: allChecklistItems = [] } = useQuery({
+    queryKey: ['checklist-items-all'],
+    queryFn: () => apiClient.getChecklistItems(),
+  });
+
+  // Recupera tutte le assegnazioni di checklist per calcolare le dotazioni mancanti
+  const apartmentChecklistsQueries = useQuery({
+    queryKey: ['all-apartment-checklists'],
+    queryFn: async () => {
+      const allAssignments = [];
+      for (const apartment of apartments) {
+        const assignments = await apiClient.getApartmentChecklists(apartment.id);
+        allAssignments.push(...assignments.map(a => ({ ...a, apartment_id: apartment.id })));
+      }
+      return allAssignments;
+    },
+    enabled: apartments.length > 0,
+  });
+
+  const allApartmentChecklists = apartmentChecklistsQueries.data || [];
 
   const getPropertyName = (propertyId) => {
     const property = properties.find(p => p.id === propertyId);
     return property?.name || 'N/A';
+  };
+
+  const getApartmentName = (apartmentId) => {
+    const apartment = apartments.find(a => a.id === apartmentId);
+    return apartment?.name || 'N/A';
+  };
+
+  const getUserName = (userId) => {
+    const allUsers = [...operators];
+    const user = allUsers.find(u => u.id === userId);
+    return user?.full_name || user?.email || 'N/A';
+  };
+
+  const getSupplyName = (supplyId) => {
+    const supply = allSupplies.find(s => s.id === supplyId);
+    return supply?.name || 'N/A';
+  };
+
+  const getChecklistItemName = (checklistItemId) => {
+    const item = allChecklistItems.find(i => i.id === checklistItemId);
+    return item?.name || 'N/A';
+  };
+
+  const getChecklistItemDetails = (checklistItemId) => {
+    return allChecklistItems.find(i => i.id === checklistItemId);
   };
 
   const getLastCleaning = (apartmentId) => {
@@ -76,188 +120,256 @@ export default function Dashboard() {
     return supplyAlerts.filter(a => a.apartment_id === apartmentId).length;
   };
 
+  // Calcola dotazioni mancanti
+  const getMissingEquipment = () => {
+    const missing = [];
+    
+    allApartmentChecklists.forEach((assignment) => {
+      const item = getChecklistItemDetails(assignment.checklist_item_id);
+      if (!item || item.item_type !== 'number') return;
+
+      // Trova l'ultimo completion per questo item e appartamento
+      const itemCompletions = completions.filter(
+        c => c.checklist_item_id === assignment.checklist_item_id && 
+             c.apartment_id === assignment.apartment_id
+      );
+
+      const currentValue = itemCompletions.length > 0 && itemCompletions[0].value_number !== null
+        ? itemCompletions[0].value_number
+        : 0;
+
+      const expected = item.expected_number || 0;
+
+      if (currentValue < expected) {
+        missing.push({
+          id: `${assignment.apartment_id}-${item.id}`,
+          apartment_id: assignment.apartment_id,
+          item_name: item.name,
+          current: currentValue,
+          expected: expected,
+          difference: expected - currentValue,
+          amazon_link: item.amazon_link,
+        });
+      }
+    });
+
+    // Ordina per differenza decrescente (priorità)
+    return missing.sort((a, b) => b.difference - a.difference);
+  };
+
+  const missingEquipment = getMissingEquipment();
+
+  const formatDateTime = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleString('it-IT', {
+      day: '2-digit',
+      month: 'short',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const formatDuration = (startTime, endTime) => {
+    if (!endTime) return 'In corso...';
+    const start = new Date(startTime);
+    const end = new Date(endTime);
+    const diffMs = end - start;
+    const diffMins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(diffMins / 60);
+    const mins = diffMins % 60;
+    return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+  };
+
   return (
-    <div className="p-6 md:p-8">
+    <div className="p-4 md:p-6 lg:p-8 pb-20 md:pb-8">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-          <p className="text-gray-600">Panoramica generale delle attività</p>
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
+          <p className="text-sm md:text-base text-gray-600">Panoramica generale delle attività</p>
         </div>
 
-        {/* Statistiche principali */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="border-none shadow-lg bg-gradient-to-br from-teal-500 to-cyan-600">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-teal-100 text-sm font-medium">Appartamenti Attivi</p>
-                  <h3 className="text-3xl font-bold text-white mt-2">{apartments.length}</h3>
-                </div>
-                <Home className="w-12 h-12 text-teal-100" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-lg bg-gradient-to-br from-purple-500 to-pink-600">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-purple-100 text-sm font-medium">Strutture</p>
-                  <h3 className="text-3xl font-bold text-white mt-2">{properties.length}</h3>
-                </div>
-                <Building2 className="w-12 h-12 text-purple-100" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-lg bg-gradient-to-br from-blue-500 to-indigo-600">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-blue-100 text-sm font-medium">Operatori</p>
-                  <h3 className="text-3xl font-bold text-white mt-2">{operators.length}</h3>
-                </div>
-                <Users className="w-12 h-12 text-blue-100" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-lg bg-gradient-to-br from-orange-500 to-red-600">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-orange-100 text-sm font-medium">Alert Scorte</p>
-                  <h3 className="text-3xl font-bold text-white mt-2">{supplyAlerts.length}</h3>
-                </div>
-                <AlertTriangle className="w-12 h-12 text-orange-100" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Statistiche secondarie */}
-        <div className="grid md:grid-cols-3 gap-6 mb-8">
+        {/* PRIMA RIGA: Scorte in esaurimento + Stato Dotazioni */}
+        <div className="grid md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
+          
+          {/* Scorte in Esaurimento */}
           <Card className="border-none shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="bg-green-100 p-3 rounded-lg">
-                  <CheckCircle2 className="w-6 h-6 text-green-600" />
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 md:w-6 md:h-6 text-orange-600" />
+                  <CardTitle className="text-lg md:text-xl">Scorte in Esaurimento</CardTitle>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Attività Completate Oggi</p>
-                  <p className="text-2xl font-bold text-gray-900">{totalCompletionsToday}</p>
-                </div>
+                {supplyAlerts.length > 0 && (
+                  <Badge variant="destructive">{supplyAlerts.length}</Badge>
+                )}
               </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="bg-teal-100 p-3 rounded-lg">
-                  <TrendingUp className="w-6 h-6 text-teal-600" />
+            </CardHeader>
+            <CardContent className="max-h-[400px] overflow-y-auto">
+              {loadingAlerts ? (
+                <div className="space-y-3">
+                  {Array(3).fill(0).map((_, i) => (
+                    <Skeleton key={i} className="h-20 w-full" />
+                  ))}
                 </div>
-                <div>
-                  <p className="text-sm text-gray-600">Pulizie Recenti (7gg)</p>
-                  <p className="text-2xl font-bold text-gray-900">{apartmentsWithRecentCleaning}</p>
+              ) : supplyAlerts.length === 0 ? (
+                <div className="text-center py-8">
+                  <Package className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                  <p className="text-gray-500 text-sm">Nessuna scorta in esaurimento</p>
+                  <p className="text-gray-400 text-xs mt-1">Tutto sotto controllo! 🎉</p>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-none shadow-lg">
-            <CardContent className="p-6">
-              <div className="flex items-center gap-3">
-                <div className="bg-orange-100 p-3 rounded-lg">
-                  <Package className="w-6 h-6 text-orange-600" />
-                </div>
-                <div>
-                  <p className="text-sm text-gray-600">Scorte da Gestire</p>
-                  <p className="text-2xl font-bold text-gray-900">{supplyAlerts.length}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Lista appartamenti */}
-        <div>
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-900">Appartamenti</h2>
-            <Link to={createPageUrl('Apartments')}>
-              <Badge variant="outline" className="cursor-pointer hover:bg-gray-100">
-                Vedi tutti →
-              </Badge>
-            </Link>
-          </div>
-
-          {loadingApartments ? (
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {Array(8).fill(0).map((_, i) => (
-                <Skeleton key={i} className="h-48 w-full" />
-              ))}
-            </div>
-          ) : apartments.length === 0 ? (
-            <Card className="border-none shadow-lg">
-              <CardContent className="p-12 text-center">
-                <Home className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                <p className="text-gray-500 text-lg mb-2">Nessun appartamento attivo</p>
-                <p className="text-gray-400 text-sm">
-                  Crea il tuo primo appartamento per iniziare
-                </p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {apartments.slice(0, 8).map((apartment) => {
-                const lastCleaning = getLastCleaning(apartment.id);
-                const daysSinceCleaning = lastCleaning 
-                  ? Math.floor((new Date() - lastCleaning) / (1000 * 60 * 60 * 24))
-                  : null;
-                const alerts = getApartmentAlerts(apartment.id);
-
-                return (
-                  <Link key={apartment.id} to={createPageUrl('Apartments')}>
-                    <Card className="border-none shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer">
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            <Home className="w-5 h-5 text-cyan-600" />
-                            <h3 className="text-lg font-semibold">{apartment.name}</h3>
-                          </div>
-                          {alerts > 0 && (
-                            <Badge className="bg-orange-100 text-orange-700">
-                              {alerts} alert
-                            </Badge>
-                          )}
+              ) : (
+                <div className="space-y-3">
+                  {supplyAlerts.map((alert) => (
+                    <div key={alert.id} className="p-3 bg-orange-50 border-l-4 border-orange-500 rounded-r-lg">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <Package className="w-4 h-4 text-orange-600 shrink-0" />
+                          <span className="font-semibold text-sm text-gray-900 truncate">
+                            {getSupplyName(alert.supply_id)}
+                          </span>
                         </div>
-                        <p className="text-sm text-gray-600 mb-4">
-                          {getPropertyName(apartment.property_id)}
-                        </p>
-                        
-                        {lastCleaning ? (
-                          <div className="flex items-center gap-2 mb-4">
-                            <Calendar className="w-4 h-4 text-gray-500" />
-                            <span className="text-sm text-gray-600">
-                              Ultima pulizia: {daysSinceCleaning === 0 ? 'Oggi' : `${daysSinceCleaning}gg fa`}
-                            </span>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 mb-4">
-                            <Calendar className="w-4 h-4 text-gray-400" />
-                            <span className="text-sm text-gray-400">
-                              Nessuna pulizia registrata
-                            </span>
-                          </div>
+                        <Badge variant="destructive" className="text-xs shrink-0">Urgente</Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+                        <MapPin className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{getApartmentName(alert.apartment_id)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600">Attuale: <span className="font-bold text-orange-600">{alert.current_quantity}</span></span>
+                        <span className="text-gray-600">Minimo: <span className="font-semibold">{alert.threshold}</span></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Stato Dotazioni */}
+          <Card className="border-none shadow-lg">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 md:w-6 md:h-6 text-red-600" />
+                  <CardTitle className="text-lg md:text-xl">Dotazioni Mancanti</CardTitle>
+                </div>
+                {missingEquipment.length > 0 && (
+                  <Badge variant="destructive">{missingEquipment.length}</Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="max-h-[400px] overflow-y-auto">
+              {missingEquipment.length === 0 ? (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="w-12 h-12 mx-auto mb-3 text-green-500" />
+                  <p className="text-gray-500 text-sm">Tutte le dotazioni complete</p>
+                  <p className="text-gray-400 text-xs mt-1">Nessun acquisto necessario! ✨</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {missingEquipment.slice(0, 10).map((item) => (
+                    <div key={item.id} className="p-3 bg-red-50 border-l-4 border-red-500 rounded-r-lg">
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <Package className="w-4 h-4 text-red-600 shrink-0" />
+                          <span className="font-semibold text-sm text-gray-900 truncate">
+                            {item.item_name}
+                          </span>
+                        </div>
+                        <Badge variant="destructive" className="text-xs shrink-0">-{item.difference}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-gray-600 mb-2">
+                        <MapPin className="w-3 h-3 shrink-0" />
+                        <span className="truncate">{getApartmentName(item.apartment_id)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-600">
+                          Attuale: <span className="font-bold text-red-600">{item.current}</span> / Richiesto: <span className="font-semibold">{item.expected}</span>
+                        </span>
+                        {item.amazon_link && (
+                          <a 
+                            href={item.amazon_link} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-800 font-medium"
+                          >
+                            <ShoppingCart className="w-3 h-3" />
+                            Acquista
+                          </a>
                         )}
-                      </CardContent>
-                    </Card>
-                  </Link>
-                );
-              })}
-            </div>
-          )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
+
+        {/* SECONDA RIGA: Storico Operazioni (full width) */}
+        <Card className="border-none shadow-lg mb-6 md:mb-8">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ClipboardList className="w-5 h-5 md:w-6 md:h-6 text-gray-700" />
+                <CardTitle className="text-lg md:text-xl">Storico Operazioni</CardTitle>
+              </div>
+              <Badge variant="outline" className="text-xs md:text-sm cursor-pointer hover:bg-gray-100">
+                Vedi tutte →
+              </Badge>
+            </div>
+            <CardDescription className="text-xs md:text-sm">
+              Ultime operazioni degli operatori
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {loadingSessions ? (
+              <div className="space-y-2">
+                {Array(3).fill(0).map((_, i) => (
+                  <Skeleton key={i} className="h-12 w-full" />
+                ))}
+              </div>
+            ) : workSessions.length === 0 ? (
+              <div className="text-center py-8">
+                <ClipboardList className="w-12 h-12 mx-auto mb-3 text-gray-300" />
+                <p className="text-gray-500 text-sm">Nessuna operazione registrata</p>
+                <p className="text-gray-400 text-xs mt-1">Le operazioni appariranno qui</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {workSessions.map((session) => (
+                  <div 
+                    key={session.id}
+                    className="flex items-center justify-between p-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                  >
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${
+                        session.end_time ? 'bg-green-500' : 'bg-blue-500'
+                      }`} />
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <span className="font-semibold text-sm text-gray-900 truncate">
+                          {getApartmentName(session.apartment_id)}
+                        </span>
+                        <span className="text-xs text-gray-500 hidden md:inline">•</span>
+                        <span className="text-xs text-gray-600 truncate hidden md:inline">
+                          {getUserName(session.user_id)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-xs text-gray-500 whitespace-nowrap hidden sm:inline">
+                        {formatDateTime(session.start_time)}
+                      </span>
+                      <Badge variant={session.end_time ? "default" : "secondary"} className="text-xs">
+                        {session.end_time ? formatDuration(session.start_time, session.end_time) : 'In corso'}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
