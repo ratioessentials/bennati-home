@@ -18,13 +18,16 @@ import {
   Home,
   CheckCircle2,
   Circle,
+  Check,
   Package,
   AlertTriangle,
   ChevronRight,
   ChevronLeft,
   Sparkles,
   Send,
-  ExternalLink
+  ExternalLink,
+  Box,
+  Edit
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -236,8 +239,23 @@ export default function OperatorWorkflow() {
     if (checklistValues[itemId] !== undefined) {
       return checklistValues[itemId];
     }
+    // Se c'è una completion, recupera il valore da lì
+    const completion = completions.find(c => c.checklist_item_id === itemId);
+    if (completion) {
+      if (item_type === 'number' && completion.value_number !== null) {
+        return completion.value_number;
+      }
+      if (item_type === 'yes_no' && completion.value_bool !== null) {
+        return completion.value_bool;
+      }
+    }
     // Valore di default in base al tipo
     return item_type === 'yes_no' ? false : null;
+  };
+  
+  const getCurrentNumberValue = (itemId) => {
+    const completion = completions.find(c => c.checklist_item_id === itemId);
+    return completion?.value_number ?? null;
   };
   
   const setChecklistValue = (itemId, value) => {
@@ -507,96 +525,188 @@ export default function OperatorWorkflow() {
                               </div>
                             )}
                             
-                            {/* TIPO: YES_NO (Sì/No con Toggle) */}
+                            {/* TIPO: YES_NO (trattato come CHECK normale) */}
                             {itemType === 'yes_no' && (
-                              <div className="space-y-3">
-                                <div className="flex items-start gap-4">
-                                  <div className="flex-1">
-                                    <p className="text-lg font-bold mb-1 text-gray-900">
-                                      {item.title}
+                              <div className="flex items-start gap-4">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="icon"
+                                  onClick={() => handleToggle(item.id, 'check')}
+                                  className={`flex-shrink-0 h-10 w-10 rounded-full transition-all ${
+                                    completed 
+                                      ? 'bg-green-500 hover:bg-green-600 text-white' 
+                                      : 'bg-gray-200 hover:bg-gray-300 text-gray-600'
+                                  }`}
+                                >
+                                  {completed ? (
+                                    <Check className="h-6 w-6" />
+                                  ) : (
+                                    <div className="h-4 w-4 rounded border-2 border-gray-400" />
+                                  )}
+                                </Button>
+                                <div className="flex-1">
+                                  <p className={`text-lg font-bold mb-1 ${
+                                    completed ? 'text-green-700 line-through' : 'text-gray-900'
+                                  }`}>
+                                    {item.title}
+                                  </p>
+                                  {item.description && (
+                                    <p className="text-sm text-gray-600">
+                                      {item.description}
                                     </p>
-                                    {item.description && (
-                                      <p className="text-sm text-gray-600">
-                                        {item.description}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="flex items-center justify-between bg-gray-50 rounded-lg p-4">
-                                  <Label htmlFor={`toggle-${item.id}`} className="text-base font-semibold">
-                                    {currentValue ? 'Sì' : 'No'}
-                                  </Label>
-                                  <Switch
-                                    id={`toggle-${item.id}`}
-                                    checked={currentValue}
-                                    onCheckedChange={(checked) => {
-                                      setChecklistValue(item.id, checked);
-                                      handleToggle(item.id, 'yes_no', checked, null);
-                                    }}
-                                    className="data-[state=checked]:bg-green-600"
-                                  />
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* TIPO: NUMBER (Inserimento Numero) */}
-                            {itemType === 'number' && (
-                              <div className="space-y-3">
-                                <div className="flex items-start gap-4">
-                                  <div className="flex-1">
-                                    <p className="text-lg font-bold mb-1 text-gray-900">
-                                      {item.title}
-                                    </p>
-                                    {item.description && (
-                                      <p className="text-sm text-gray-600">
-                                        {item.description}
-                                      </p>
-                                    )}
-                                    {item.expected_number && (
-                                      <p className="text-sm text-gray-500 mt-1">
-                                        Numero previsto: <span className="font-semibold">{item.expected_number}</span>
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
-                                  <Label htmlFor={`number-${item.id}`} className="text-base font-semibold">
-                                    Numero Attuale
-                                  </Label>
-                                  <Input
-                                    id={`number-${item.id}`}
-                                    type="number"
-                                    value={currentValue || ''}
-                                    onChange={(e) => {
-                                      const value = parseInt(e.target.value) || null;
-                                      setChecklistValue(item.id, value);
-                                    }}
-                                    onBlur={(e) => {
-                                      const value = parseInt(e.target.value) || null;
-                                      handleToggle(item.id, 'number', null, value);
-                                    }}
-                                    placeholder="Inserisci numero..."
-                                    className="text-center text-2xl font-bold h-14"
-                                  />
-                                  {item.expected_number && currentValue < item.expected_number && item.amazon_link && (
-                                    <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
-                                      <p className="text-sm text-orange-800 font-medium mb-2">
-                                        ⚠️ Quantità inferiore al previsto
-                                      </p>
-                                      <a
-                                        href={item.amazon_link}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-800 font-medium"
-                                      >
-                                        <ExternalLink className="w-4 h-4" />
-                                        Acquista su Amazon
-                                      </a>
-                                    </div>
                                   )}
                                 </div>
                               </div>
                             )}
+                            
+                            {/* TIPO: NUMBER (Dotazioni) */}
+                            {itemType === 'number' && (() => {
+                              const currentNumber = getCurrentNumberValue(item.id);
+                              const expectedNumber = item.expected_number;
+                              const hasValue = currentNumber !== null;
+                              const needsInput = hasValue && currentNumber !== expectedNumber;
+                              const isCorrect = hasValue && currentNumber === expectedNumber;
+                              
+                              return (
+                                <div className="flex items-center gap-4">
+                                  {/* Icona e titolo */}
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <Box className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                                      <p className={`text-base font-bold ${
+                                        isCorrect ? 'text-green-700' : 'text-gray-900'
+                                      }`}>
+                                        {item.title}
+                                      </p>
+                                      {expectedNumber && (
+                                        <span className="text-xs text-gray-500">
+                                          (previsto: {expectedNumber})
+                                        </span>
+                                      )}
+                                    </div>
+                                    {item.description && (
+                                      <p className="text-xs text-gray-500 mt-0.5 ml-7">
+                                        {item.description}
+                                      </p>
+                                    )}
+                                  </div>
+                                  
+                                  {/* Controlli su una riga */}
+                                  <div className="flex items-center gap-2">
+                                    {!hasValue ? (
+                                      // Nessun valore - mostra pulsante conferma o input compatto
+                                      expectedNumber ? (
+                                        <>
+                                          <Button
+                                            type="button"
+                                            onClick={() => {
+                                              handleToggle(item.id, 'number', null, expectedNumber);
+                                            }}
+                                            className="bg-green-600 hover:bg-green-700 text-white h-9 px-3 text-sm"
+                                            title={`Conferma: ${expectedNumber}`}
+                                          >
+                                            <Check className="w-4 h-4 mr-1" />
+                                            {expectedNumber}
+                                          </Button>
+                                          <Input
+                                            id={`number-${item.id}`}
+                                            type="number"
+                                            value={currentValue || ''}
+                                            onChange={(e) => {
+                                              const value = parseInt(e.target.value) || null;
+                                              setChecklistValue(item.id, value);
+                                            }}
+                                            onBlur={(e) => {
+                                              const value = parseInt(e.target.value) || null;
+                                              if (value !== null) {
+                                                handleToggle(item.id, 'number', null, value);
+                                              }
+                                            }}
+                                            placeholder="Altro"
+                                            className="w-20 h-9 text-center text-sm font-semibold"
+                                          />
+                                        </>
+                                      ) : (
+                                        <Input
+                                          id={`number-${item.id}`}
+                                          type="number"
+                                          value={currentValue || ''}
+                                          onChange={(e) => {
+                                            const value = parseInt(e.target.value) || null;
+                                            setChecklistValue(item.id, value);
+                                          }}
+                                          onBlur={(e) => {
+                                            const value = parseInt(e.target.value) || null;
+                                            if (value !== null) {
+                                              handleToggle(item.id, 'number', null, value);
+                                            }
+                                          }}
+                                          placeholder="Numero"
+                                          className="w-20 h-9 text-center text-sm font-semibold"
+                                        />
+                                      )
+                                    ) : needsInput ? (
+                                      // Valore diverso - mostra input compatto
+                                      <>
+                                        <Input
+                                          id={`number-${item.id}`}
+                                          type="number"
+                                          value={currentValue || currentNumber || ''}
+                                          onChange={(e) => {
+                                            const value = parseInt(e.target.value) || null;
+                                            setChecklistValue(item.id, value);
+                                          }}
+                                          onBlur={(e) => {
+                                            const value = parseInt(e.target.value) || null;
+                                            if (value !== null) {
+                                              handleToggle(item.id, 'number', null, value);
+                                            }
+                                          }}
+                                          className="w-20 h-9 text-center text-sm font-semibold border-orange-300"
+                                        />
+                                        {item.amazon_link && (currentValue || currentNumber) < expectedNumber && (
+                                          <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() => window.open(item.amazon_link, '_blank', 'noopener,noreferrer')}
+                                            className="h-9 px-2"
+                                            title="Acquista su Amazon"
+                                          >
+                                            <ExternalLink className="w-4 h-4 text-orange-600" />
+                                          </Button>
+                                        )}
+                                      </>
+                                    ) : (
+                                      // Valore corretto - mostra conferma compatta
+                                      <>
+                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 rounded border border-green-200">
+                                          <Check className="w-4 h-4 text-green-600" />
+                                          <span className="text-sm font-semibold text-green-700">
+                                            {currentNumber}
+                                          </span>
+                                        </div>
+                                        <Button
+                                          type="button"
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => {
+                                            if (completed) {
+                                              handleToggle(item.id, 'number', null, null);
+                                            }
+                                          }}
+                                          className="h-9 w-9"
+                                          title="Modifica"
+                                        >
+                                          <Edit className="w-4 h-4 text-gray-600" />
+                                        </Button>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })()}
                           </CardContent>
                         </Card>
                       );
@@ -632,7 +742,7 @@ export default function OperatorWorkflow() {
           </div>
         )}
 
-        {/* STEP 3: Controllo Scorte */}
+        {/* STEP 3: Controllo Magazzino */}
         {currentStep === 3 && (
           <div className="space-y-4 animate-in fade-in duration-500">
             <Card className="border-none shadow-xl bg-gradient-to-r from-orange-500 to-red-600 text-white sticky top-20 z-40">
@@ -641,7 +751,7 @@ export default function OperatorWorkflow() {
                   <div>
                     <h2 className="text-xl font-bold flex items-center gap-2">
                       <Package className="w-6 h-6" />
-                      Controllo Scorte
+                      Controllo Magazzino
                     </h2>
                     <p className="text-orange-100 text-sm mt-1">Aggiorna le quantità dei prodotti</p>
                   </div>
@@ -785,7 +895,7 @@ export default function OperatorWorkflow() {
                   <h3 className="font-semibold text-teal-900 mb-2">Riepilogo Operazione:</h3>
                   <ul className="space-y-1 text-sm text-teal-800">
                     <li>✓ Checklist completata: {completedCount}/{totalChecklistItems} attività</li>
-                    <li>✓ Scorte verificate: {apartmentSupplies.length} prodotti</li>
+                    <li>✓ Magazzino verificato: {apartmentSupplies.length} prodotti</li>
                     <li>✓ Appartamento: {getSelectedApartmentName()}</li>
                   </ul>
                 </div>

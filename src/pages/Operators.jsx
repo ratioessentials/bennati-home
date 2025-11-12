@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiClient } from "@/components/api/apiClient";
+import { useProperty } from "@/contexts/PropertyContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Users, Mail, Phone, Calendar, Clock, Home, CheckCircle2, User, ChevronRight, UserPlus, Trash2, Eye, Edit } from "lucide-react";
@@ -28,6 +29,7 @@ import {
 import { toast } from "sonner";
 
 export default function Operators() {
+  const { selectedPropertyId } = useProperty();
   const [selectedSession, setSelectedSession] = useState(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [addOperatorDialogOpen, setAddOperatorDialogOpen] = useState(false);
@@ -67,9 +69,20 @@ export default function Operators() {
   });
 
   const { data: apartments = [] } = useQuery({
-    queryKey: ['apartments'],
-    queryFn: () => apiClient.getApartments({}),
+    queryKey: ['apartments', selectedPropertyId],
+    queryFn: () => apiClient.getApartments(selectedPropertyId ? { property_id: selectedPropertyId } : {}),
+    enabled: !!selectedPropertyId,
   });
+  
+  // Filtra le work sessions per appartamenti della struttura selezionata
+  const apartmentIds = React.useMemo(() => {
+    return apartments.map(apt => apt.id);
+  }, [apartments]);
+  
+  const filteredWorkSessions = React.useMemo(() => {
+    if (!selectedPropertyId || apartmentIds.length === 0) return [];
+    return workSessions.filter(session => apartmentIds.includes(session.apartment_id));
+  }, [workSessions, apartmentIds, selectedPropertyId]);
 
   const { data: checklistItems = [] } = useQuery({
     queryKey: ['checklist-items'],
@@ -78,10 +91,10 @@ export default function Operators() {
 
   // Ordina le work sessions per data di inizio decrescente
   const sortedSessions = React.useMemo(() => {
-    return [...workSessions].sort((a, b) => 
+    return [...filteredWorkSessions].sort((a, b) => 
       new Date(b.start_time) - new Date(a.start_time)
     );
-  }, [workSessions]);
+  }, [filteredWorkSessions]);
 
   const getUserName = (userId) => {
     const user = users.find(u => u.id === userId);

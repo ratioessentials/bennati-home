@@ -8,6 +8,7 @@ import Apartments from "./Apartments";
 import Properties from "./Properties";
 
 import AdminChecklists from "./AdminChecklists";
+import AdminDotazioni from "./AdminDotazioni";
 
 import Operators from "./Operators";
 
@@ -20,6 +21,7 @@ import Dashboard from "./Dashboard";
 import OperatorWorkflow from "./OperatorWorkflow";
 
 import { BrowserRouter as Router, Route, Routes, useLocation } from 'react-router-dom';
+import { PropertyProvider } from '@/contexts/PropertyContext';
 
 const PAGES = {
     
@@ -30,6 +32,8 @@ const PAGES = {
     Properties: Properties,
     
     AdminChecklists: AdminChecklists,
+    
+    AdminDotazioni: AdminDotazioni,
     
     Operators: Operators,
     
@@ -79,6 +83,8 @@ function PagesContent() {
                 
                 <Route path="/AdminChecklists" element={<AdminChecklists />} />
                 
+                <Route path="/AdminDotazioni" element={<AdminDotazioni />} />
+                
                 <Route path="/Operators" element={<Operators />} />
                 
                 <Route path="/AdminSupplies" element={<AdminSupplies />} />
@@ -96,8 +102,10 @@ function PagesContent() {
 
 export default function Pages() {
     return (
-        <Router>
-            <PagesContent />
-        </Router>
+        <PropertyProvider>
+            <Router>
+                <PagesContent />
+            </Router>
+        </PropertyProvider>
     );
 }

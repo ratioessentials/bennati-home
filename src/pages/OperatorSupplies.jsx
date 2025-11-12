@@ -81,7 +81,7 @@ export default function OperatorSupplies() {
       for (const admin of admins) {
         await apiClient.integrations.Core.SendEmail({
           to: admin.email,
-          subject: `⚠️ Alert Scorte - ${supply?.name}`,
+          subject: `⚠️ Alert Magazzino - ${supply?.name}`,
           body: `
 Ciao ${admin.full_name},
 
@@ -147,7 +147,7 @@ Perfect House - Sistema di Gestione Pulizie
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-1 flex items-center gap-2">
             <Package className="w-7 h-7 text-orange-600" />
-            Controllo Scorte
+            Controllo Magazzino
           </h1>
           <p className="text-gray-600">
             Verifica i prodotti e segnala se terminati
@@ -218,7 +218,7 @@ Perfect House - Sistema di Gestione Pulizie
             <CardContent className="p-12 text-center">
               <Home className="w-16 h-16 mx-auto mb-4 text-gray-300" />
               <p className="text-gray-500 text-lg">
-                Seleziona un appartamento per visualizzare le scorte
+                Seleziona un appartamento per visualizzare il magazzino
               </p>
             </CardContent>
           </Card>

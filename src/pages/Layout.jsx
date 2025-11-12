@@ -3,6 +3,7 @@ import React from "react";
 import { Link } from "react-router-dom";
 import { createPageUrl } from "@/components/utils";
 import { apiClient } from "@/components/api/apiClient";
+import { useProperty } from "@/contexts/PropertyContext";
 import { 
   LayoutDashboard,
   Building2, 
@@ -12,25 +13,39 @@ import {
   Users,
   LogOut,
   Menu,
-  X
+  X,
+  ChevronDown,
+  Box
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Layout({ children, currentPageName }) {
   const [user, setUser] = React.useState(null);
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
   const [loading, setLoading] = React.useState(true);
+  const { selectedProperty, properties, selectProperty, loading: propertiesLoading, refreshProperties } = useProperty();
 
   React.useEffect(() => {
     // Carica l'utente corrente dal backend Python
     apiClient.getCurrentUser()
-      .then(setUser)
+      .then((userData) => {
+        setUser(userData);
+        // Dopo il login, ricarica le strutture
+        refreshProperties();
+      })
       .catch(() => {
         // Se non autenticato, reindirizza al login
         window.location.href = '/login';
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [refreshProperties]);
 
   // Reindirizza operatori all'OperatorWorkflow se sono sulla Dashboard
   React.useEffect(() => {
@@ -47,7 +62,8 @@ export default function Layout({ children, currentPageName }) {
     { name: "Strutture", icon: Building2, page: "Properties" },
     { name: "Appartamenti", icon: Home, page: "Apartments" },
     { name: "Checklist", icon: ClipboardList, page: "AdminChecklists" },
-    { name: "Scorte", icon: Package, page: "AdminSupplies" },
+    { name: "Dotazioni", icon: Box, page: "AdminDotazioni" },
+    { name: "Magazzino", icon: Package, page: "AdminSupplies" },
     { name: "Operazioni", icon: Users, page: "Operators" },
   ];
 
@@ -77,6 +93,43 @@ export default function Layout({ children, currentPageName }) {
               <div className="flex flex-shrink-0 items-center px-6 mb-8">
                 <h1 className="text-2xl font-bold text-white">TopClean</h1>
               </div>
+              
+              {/* Selettore Struttura - Prima voce */}
+              {isAdmin && (
+                <div className="px-3 mb-4">
+                  <div className="bg-teal-700/50 rounded-lg p-3 border border-teal-500/30">
+                    <label className="text-xs font-medium text-teal-200 mb-2 block">
+                      Struttura
+                    </label>
+                    {propertiesLoading ? (
+                      <div className="h-9 bg-teal-800/50 rounded animate-pulse" />
+                    ) : properties.length > 0 ? (
+                      <Select
+                        value={selectedProperty?.id?.toString() || ""}
+                        onValueChange={(value) => selectProperty(parseInt(value))}
+                      >
+                        <SelectTrigger className="w-full bg-white/10 border-teal-500/50 text-white hover:bg-white/20 h-9">
+                          <SelectValue placeholder="Seleziona struttura">
+                            {selectedProperty?.name || "Seleziona struttura"}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {properties.map((property) => (
+                            <SelectItem key={property.id} value={property.id.toString()}>
+                              {property.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="text-xs text-teal-300 text-center py-2">
+                        Nessuna struttura
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <nav className="mt-5 flex-1 space-y-2 px-3">
                 {menuItems.map((item) => {
                   const Icon = item.icon;
@@ -138,6 +191,39 @@ export default function Layout({ children, currentPageName }) {
         
         {mobileMenuOpen && (isAdmin || isOperator) && (
           <div className="bg-teal-700 border-t border-teal-500">
+            {/* Selettore Struttura Mobile */}
+            {isAdmin && (
+              <div className="px-3 py-3 border-b border-teal-500">
+                <label className="text-xs font-medium text-teal-200 mb-2 block">
+                  Struttura
+                </label>
+                {propertiesLoading ? (
+                  <div className="h-9 bg-teal-800/50 rounded animate-pulse" />
+                ) : properties.length > 0 ? (
+                  <Select
+                    value={selectedProperty?.id?.toString() || ""}
+                    onValueChange={(value) => selectProperty(parseInt(value))}
+                  >
+                    <SelectTrigger className="w-full bg-white/10 border-teal-500/50 text-white hover:bg-white/20 h-9">
+                      <SelectValue placeholder="Seleziona struttura">
+                        {selectedProperty?.name || "Seleziona struttura"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {properties.map((property) => (
+                        <SelectItem key={property.id} value={property.id.toString()}>
+                          {property.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="text-xs text-teal-300 text-center py-2">
+                    Nessuna struttura
+                  </div>
+                )}
+              </div>
+            )}
             <nav className="px-2 py-3 space-y-1">
               {menuItems.map((item) => {
                 const Icon = item.icon;

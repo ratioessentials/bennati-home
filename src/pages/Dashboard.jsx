@@ -1,5 +1,6 @@
 import React from "react";
 import { apiClient } from "@/components/api/apiClient";
+import { useProperty } from "@/contexts/PropertyContext";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { 
@@ -23,14 +24,16 @@ import { Link } from "react-router-dom";
 import { createPageUrl } from "@/components/utils";
 
 export default function Dashboard() {
+  const { selectedPropertyId } = useProperty();
   const { data: properties = [], isLoading: loadingProperties } = useQuery({
     queryKey: ['properties'],
     queryFn: () => apiClient.getProperties(),
   });
 
   const { data: apartments = [], isLoading: loadingApartments } = useQuery({
-    queryKey: ['apartments'],
-    queryFn: () => apiClient.getApartments({ active: true }),
+    queryKey: ['apartments', selectedPropertyId],
+    queryFn: () => apiClient.getApartments(selectedPropertyId ? { property_id: selectedPropertyId, active: true } : { active: true }),
+    enabled: !!selectedPropertyId,
   });
 
   const { data: operators = [] } = useQuery({
@@ -188,16 +191,16 @@ export default function Dashboard() {
           <p className="text-sm md:text-base text-gray-600">Panoramica generale delle attività</p>
         </div>
 
-        {/* PRIMA RIGA: Scorte in esaurimento + Stato Dotazioni */}
+        {/* PRIMA RIGA: Magazzino in esaurimento + Stato Dotazioni */}
         <div className="grid md:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
           
-          {/* Scorte in Esaurimento */}
+          {/* Magazzino in Esaurimento */}
           <Card className="border-none shadow-lg">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="w-5 h-5 md:w-6 md:h-6 text-orange-600" />
-                  <CardTitle className="text-lg md:text-xl">Scorte in Esaurimento</CardTitle>
+                  <CardTitle className="text-lg md:text-xl">Magazzino in Esaurimento</CardTitle>
                 </div>
                 {supplyAlerts.length > 0 && (
                   <Badge variant="destructive">{supplyAlerts.length}</Badge>

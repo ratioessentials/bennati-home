@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { apiClient } from "@/components/api/apiClient";
+import { useProperty } from "@/contexts/PropertyContext";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +42,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 
 export default function AdminSupplies() {
   const queryClient = useQueryClient();
+  const { selectedPropertyId } = useProperty();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingSupply, setEditingSupply] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState("all");
@@ -62,8 +64,9 @@ export default function AdminSupplies() {
   });
 
   const { data: apartments } = useQuery({
-    queryKey: ['apartments'],
-    queryFn: () => apiClient.getApartments(),
+    queryKey: ['apartments', selectedPropertyId],
+    queryFn: () => apiClient.getApartments(selectedPropertyId ? { property_id: selectedPropertyId } : {}),
+    enabled: !!selectedPropertyId,
     initialData: [],
   });
 
@@ -208,8 +211,8 @@ export default function AdminSupplies() {
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Scorte Globali</h1>
-            <p className="text-gray-600">Gestisci le scorte disponibili per tutti gli appartamenti</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Magazzino</h1>
+            <p className="text-gray-600">Gestisci il magazzino disponibile per tutti gli appartamenti</p>
           </div>
           <Button
             onClick={() => {
@@ -252,7 +255,7 @@ export default function AdminSupplies() {
                   <TableHead className="font-bold text-gray-900 py-4 px-6">Nome Prodotto</TableHead>
                   <TableHead className="font-bold text-gray-900 py-4 px-6">Stato</TableHead>
                   <TableHead className="font-bold text-gray-900 py-4 px-6">Stanza</TableHead>
-                  <TableHead className="font-bold text-gray-900 py-4 px-6">Scorte Totali</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6">Magazzino Totale</TableHead>
                   <TableHead className="font-bold text-gray-900 py-4 px-6 text-right">Azioni</TableHead>
                 </TableRow>
               </TableHeader>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -27,25 +27,25 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { CheckSquare, Plus, Edit, Trash2, Home, MoreVertical } from "lucide-react";
+import { 
+  ClipboardList, 
+  Plus, 
+  Edit, 
+  Trash2, 
+  MoreVertical,
+  ExternalLink,
+  AlertTriangle
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-export default function AdminChecklists() {
+export default function AdminDotazioni() {
   const queryClient = useQueryClient();
   const { selectedPropertyId } = useProperty();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingChecklist, setEditingChecklist] = useState(null);
-  const [selectedTab, setSelectedTab] = useState("all");
+  const [selectedRoom, setSelectedRoom] = useState("all");
   const [expandedChecklists, setExpandedChecklists] = useState({});
   const [formData, setFormData] = useState({
     title: "",
@@ -53,7 +53,7 @@ export default function AdminChecklists() {
     room_name: "",
     is_mandatory: false,
     order: 0,
-    item_type: "check",
+    item_type: "number",
     expected_number: null,
     amazon_link: ""
   });
@@ -64,8 +64,8 @@ export default function AdminChecklists() {
     initialData: [],
   });
 
-  // Filtra solo le checklist (escludi le dotazioni)
-  const filteredChecklistsByType = checklists.filter(c => c.item_type !== 'number');
+  // Filtra solo le dotazioni (item_type === 'number')
+  const dotazioni = checklists.filter(c => c.item_type === 'number');
 
   const { data: apartments } = useQuery({
     queryKey: ['apartments', selectedPropertyId],
@@ -123,7 +123,7 @@ export default function AdminChecklists() {
       room_name: "",
       is_mandatory: false,
       order: 0,
-      item_type: "check",
+      item_type: "number",
       expected_number: null,
       amazon_link: ""
     });
@@ -131,23 +131,16 @@ export default function AdminChecklists() {
   };
 
   const handleEdit = (checklist) => {
-    // Non permettere la modifica di dotazioni (item_type === 'number') da questa pagina
-    if (checklist.item_type === 'number') {
-      alert('Le dotazioni devono essere modificate dalla sezione "Dotazioni"');
-      return;
-    }
     setEditingChecklist(checklist);
-    // Tratta "yes_no" come "check" quando si modifica
-    const itemType = checklist.item_type === 'yes_no' ? 'check' : "check";
     setFormData({
       title: checklist.title,
       description: checklist.description || "",
       room_name: checklist.room_name || "",
       is_mandatory: checklist.is_mandatory,
       order: checklist.order,
-      item_type: itemType,
-      expected_number: null,
-      amazon_link: ""
+      item_type: "number",
+      expected_number: checklist.expected_number || null,
+      amazon_link: checklist.amazon_link || ""
     });
     setDialogOpen(true);
   };
@@ -186,33 +179,12 @@ export default function AdminChecklists() {
     return assignments;
   };
 
-  // Ottieni tutte le stanze uniche dalle checklist (escludi le dotazioni)
-  const allRooms = React.useMemo(() => {
-    const rooms = new Set();
-    filteredChecklistsByType.forEach(checklist => {
-      if (checklist.room_name) {
-        rooms.add(checklist.room_name);
-      }
-    });
-    // Ordina le stanze in un ordine predefinito
-    const predefinedOrder = ['bagno', 'camera da letto', 'salotto', 'ingresso', 'generale'];
-    const sortedRooms = Array.from(rooms).sort((a, b) => {
-      const aIndex = predefinedOrder.indexOf(a.toLowerCase());
-      const bIndex = predefinedOrder.indexOf(b.toLowerCase());
-      if (aIndex === -1 && bIndex === -1) return a.localeCompare(b);
-      if (aIndex === -1) return 1;
-      if (bIndex === -1) return -1;
-      return aIndex - bIndex;
-    });
-    return sortedRooms;
-  }, [filteredChecklistsByType]);
-
-  const getFilteredChecklists = (roomName) => {
-    let filtered = filteredChecklistsByType;
+  const getFilteredChecklists = () => {
+    let filtered = dotazioni;
     
     // Filtra per stanza
-    if (roomName !== "all") {
-      filtered = filtered.filter(checklist => checklist.room_name === roomName);
+    if (selectedRoom !== "all") {
+      filtered = filtered.filter(checklist => checklist.room_name === selectedRoom);
     }
     
     // Ordina
@@ -222,7 +194,7 @@ export default function AdminChecklists() {
     });
   };
   
-  const filteredChecklists = getFilteredChecklists(selectedTab);
+  const filteredChecklists = getFilteredChecklists();
 
   const getCategoryColor = (category) => {
     const normalizedCategory = category?.toLowerCase() || '';
@@ -241,32 +213,14 @@ export default function AdminChecklists() {
         return 'bg-gray-100 text-gray-700';
     }
   };
-  
-  const getRoomDotColor = (room) => {
-    const normalizedRoom = room?.toLowerCase() || '';
-    switch(normalizedRoom) {
-      case 'bagno':
-        return 'bg-blue-500';
-      case 'camera da letto':
-        return 'bg-purple-500';
-      case 'salotto':
-        return 'bg-teal-500';
-      case 'ingresso':
-        return 'bg-orange-500';
-      case 'generale':
-        return 'bg-gray-500';
-      default:
-        return 'bg-gray-500';
-    }
-  };
 
   return (
     <div className="p-6 md:p-8">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Checklist Globali</h1>
-            <p className="text-gray-600">Gestisci le checklist disponibili per tutti gli appartamenti</p>
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Dotazioni</h1>
+            <p className="text-gray-600">Gestisci le dotazioni degli appartamenti</p>
           </div>
           <Button
             onClick={() => {
@@ -276,57 +230,63 @@ export default function AdminChecklists() {
             className="bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700 shadow-lg shadow-teal-500/30"
           >
             <Plus className="w-4 h-4 mr-2" />
-            Nuova Checklist
+            Nuova Dotazione
           </Button>
         </div>
 
+        <Card className="mb-6 border-none shadow-lg">
+          <CardContent className="p-6">
+            <div>
+              <Label className="mb-2 block">Filtra per Stanza</Label>
+              <Select value={selectedRoom} onValueChange={setSelectedRoom}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutte le Stanze</SelectItem>
+                  <SelectItem value="bagno">Bagno</SelectItem>
+                  <SelectItem value="camera da letto">Camera da Letto</SelectItem>
+                  <SelectItem value="salotto">Salotto</SelectItem>
+                  <SelectItem value="ingresso">Ingresso</SelectItem>
+                  <SelectItem value="generale">Generale</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
-        <Tabs defaultValue="all" value={selectedTab} onValueChange={setSelectedTab} className="w-full">
-          <TabsList className="grid w-full mb-6 h-auto" style={{ gridTemplateColumns: `repeat(${Math.min(allRooms.length + 1, 6)}, minmax(0, 1fr))` }}>
-            <TabsTrigger value="all" className="text-base py-3">
-              Tutte
-            </TabsTrigger>
-            {allRooms.map((room) => (
-              <TabsTrigger key={room} value={room} className="text-base py-3">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${getRoomDotColor(room)}`}></div>
-                  {room.charAt(0).toUpperCase() + room.slice(1)}
-                </div>
-              </TabsTrigger>
-            ))}
-          </TabsList>
-
-          <TabsContent value={selectedTab} className="mt-0">
-            <Card className="border-none shadow-lg overflow-hidden">
-              <div className="overflow-x-auto">
-                <Table>
+        <Card className="border-none shadow-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <Table>
               <TableHeader>
                 <TableRow className="bg-gradient-to-r from-teal-50 to-cyan-50 hover:from-teal-50 hover:to-cyan-50">
-                  <TableHead className="font-bold text-gray-900 py-4 px-6 w-[40%]">Titolo</TableHead>
-                  <TableHead className="font-bold text-gray-900 py-4 px-6 w-[20%]">Stanza</TableHead>
-                  <TableHead className="font-bold text-gray-900 py-4 px-6 w-[20%]">Tipologia</TableHead>
-                  <TableHead className="font-bold text-gray-900 py-4 px-6 w-[20%] text-right">Azioni</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6">Nome</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6">Stanza</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6">Numero Previsto</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6">Assegnazioni</TableHead>
+                  <TableHead className="font-bold text-gray-900 py-4 px-6 text-right">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   Array(5).fill(0).map((_, i) => (
                     <TableRow key={i}>
-                      <TableCell className="py-4 px-6 w-[40%]"><Skeleton className="h-6 w-40" /></TableCell>
-                      <TableCell className="py-4 px-6 w-[20%]"><Skeleton className="h-6 w-24" /></TableCell>
-                      <TableCell className="py-4 px-6 w-[20%]"><Skeleton className="h-6 w-24" /></TableCell>
-                      <TableCell className="py-4 px-6 w-[20%]"><Skeleton className="h-6 w-20" /></TableCell>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-40" /></TableCell>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-24" /></TableCell>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-24" /></TableCell>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-20" /></TableCell>
+                      <TableCell className="py-4 px-6"><Skeleton className="h-6 w-20" /></TableCell>
                     </TableRow>
                   ))
                 ) : filteredChecklists.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-12 px-6">
-                      <CheckSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+                    <TableCell colSpan={5} className="text-center py-12 px-6">
+                      <ClipboardList className="w-16 h-16 mx-auto mb-4 text-gray-300" />
                       <p className="text-gray-500 text-lg mb-2">
-                        Nessuna checklist registrata
+                        Nessuna dotazione registrata
                       </p>
                       <p className="text-gray-400 text-sm">
-                        Clicca su "Nuova Checklist" per iniziare
+                        Clicca su "Nuova Dotazione" per iniziare
                       </p>
                     </TableCell>
                   </TableRow>
@@ -341,55 +301,66 @@ export default function AdminChecklists() {
                           className="cursor-pointer hover:bg-teal-50/50 transition-colors"
                           onClick={() => toggleExpanded(checklist.id)}
                         >
-                          <TableCell className="font-medium py-4 px-6 w-[40%]">
+                          <TableCell className="font-medium py-4 px-6">
                             <div className="flex items-center gap-3">
-                              <CheckSquare className="w-4 h-4 text-teal-600 flex-shrink-0" />
+                              <ClipboardList className="w-4 h-4 text-teal-600 flex-shrink-0" />
                               <span>{checklist.title}</span>
                               {assignments.length > 0 && (
                                 <Badge variant="outline" className="bg-teal-50 text-teal-700 border-teal-300 text-xs">
-                                  <Home className="w-3 h-3 mr-1" />
                                   {assignments.length}
                                 </Badge>
                               )}
                             </div>
                           </TableCell>
-                          <TableCell className="py-4 px-6 w-[20%]">
+                          <TableCell className="py-4 px-6">
                             {checklist.room_name && (
                               <Badge className={getCategoryColor(checklist.room_name)}>
                                 {checklist.room_name}
                               </Badge>
                             )}
                           </TableCell>
-                          <TableCell className="py-4 px-6 w-[20%]">
-                            <Badge className="bg-gray-100 text-gray-700">
-                              Checklist
-                            </Badge>
+                          <TableCell className="py-4 px-6">
+                            <span className="font-semibold text-teal-600">
+                              {checklist.expected_number || '-'}
+                            </span>
                           </TableCell>
-                          <TableCell className="py-4 px-6 w-[20%] text-right">
+                          <TableCell className="py-4 px-6">
+                            <span className="text-gray-600">
+                              {assignments.length} appartament{assignments.length !== 1 ? 'i' : 'o'}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-4 px-6 text-right">
                             <div className="flex justify-end" onClick={(e) => e.stopPropagation()}>
                               <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                   <Button variant="ghost" size="icon" className="h-8 w-8">
-                                    <MoreVertical className="w-4 h-4 text-gray-600" />
+                                    <MoreVertical className="h-4 w-4" />
                                   </Button>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleEdit(checklist)}>
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleEdit(checklist);
+                                    }}
+                                    className="cursor-pointer"
+                                  >
                                     <Edit className="w-4 h-4 mr-2" />
                                     Modifica
                                   </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={() => {
+                                  <DropdownMenuItem
+                                    onClick={(e) => {
+                                      e.stopPropagation();
                                       if (assignments.length > 0) {
-                                        if (!confirm(`Questa checklist è assegnata a ${assignments.length} appartament${assignments.length > 1 ? 'i' : 'o'}. Sei sicuro di volerla eliminare?`)) {
+                                        if (!confirm(`Questa dotazione è assegnata a ${assignments.length} appartament${assignments.length > 1 ? 'i' : 'o'}. Sei sicuro di volerla eliminare?`)) {
                                           return;
                                         }
-                                      } else if (!confirm('Sei sicuro di voler eliminare questa checklist?')) {
+                                      } else if (!confirm('Sei sicuro di voler eliminare questa dotazione?')) {
                                         return;
                                       }
                                       deleteMutation.mutate(checklist.id);
                                     }}
-                                    className="text-red-600"
+                                    className="text-red-600 focus:text-red-600 cursor-pointer"
                                   >
                                     <Trash2 className="w-4 h-4 mr-2" />
                                     Elimina
@@ -402,7 +373,7 @@ export default function AdminChecklists() {
                         {/* Accordion Row */}
                         {isExpanded && assignments.length > 0 && (
                           <TableRow className="bg-gray-50">
-                            <TableCell colSpan={4} className="p-0">
+                            <TableCell colSpan={5} className="p-0">
                               <div className="p-6 space-y-3">
                                 <div className="flex items-center gap-2 mb-4">
                                   <Home className="w-5 h-5 text-teal-600" />
@@ -416,9 +387,13 @@ export default function AdminChecklists() {
                                       key={assignment.id}
                                       className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
                                     >
-                                      <p className="font-semibold text-gray-900">
-                                        {assignment.apartment?.name}
-                                      </p>
+                                      <div className="flex justify-between items-start">
+                                        <div className="flex-1">
+                                          <p className="font-semibold text-gray-900 mb-2">
+                                            {assignment.apartment?.name}
+                                          </p>
+                                        </div>
+                                      </div>
                                     </div>
                                   ))}
                                 </div>
@@ -431,28 +406,26 @@ export default function AdminChecklists() {
                   })
                 )}
               </TableBody>
-                </Table>
-              </div>
-            </Card>
-          </TabsContent>
-        </Tabs>
+            </Table>
+          </div>
+        </Card>
 
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
-                <CheckSquare className="w-5 h-5 text-teal-600" />
-                {editingChecklist ? "Modifica Checklist" : "Nuova Checklist"}
+                <ClipboardList className="w-5 h-5 text-teal-600" />
+                {editingChecklist ? "Modifica Dotazione" : "Nuova Dotazione"}
               </DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
-                <Label htmlFor="title">Titolo *</Label>
+                <Label htmlFor="title">Nome Dotazione *</Label>
                 <Input
                   id="title"
                   value={formData.title}
                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="es: Pulire bagno, Cambiare lenzuola"
+                  placeholder="es: Asciugamani, Cuscini"
                   required
                 />
               </div>
@@ -462,7 +435,7 @@ export default function AdminChecklists() {
                   id="description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Descrizione dettagliata dell'attività..."
+                  placeholder="Descrizione opzionale"
                   rows={3}
                 />
               </div>
@@ -484,20 +457,45 @@ export default function AdminChecklists() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label htmlFor="expected_number">Numero Previsto *</Label>
+                <Input
+                  id="expected_number"
+                  type="number"
+                  min="1"
+                  value={formData.expected_number || ""}
+                  onChange={(e) => setFormData({ ...formData, expected_number: parseInt(e.target.value) || null })}
+                  placeholder="es: 4"
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="amazon_link">Link Amazon (opzionale)</Label>
+                <Input
+                  id="amazon_link"
+                  type="url"
+                  value={formData.amazon_link}
+                  onChange={(e) => setFormData({ ...formData, amazon_link: e.target.value })}
+                  placeholder="https://amazon.it/..."
+                />
+              </div>
               <DialogFooter>
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setDialogOpen(false)}
+                  onClick={() => {
+                    setDialogOpen(false);
+                    resetForm();
+                  }}
                 >
                   Annulla
                 </Button>
                 <Button
                   type="submit"
-                  className="bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700"
                   disabled={createMutation.isPending || updateMutation.isPending}
+                  className="bg-gradient-to-r from-teal-500 to-cyan-600 hover:from-teal-600 hover:to-cyan-700"
                 >
-                  {editingChecklist ? "Salva Modifiche" : "Crea Checklist"}
+                  {editingChecklist ? "Salva Modifiche" : "Crea Dotazione"}
                 </Button>
               </DialogFooter>
             </form>
@@ -507,3 +505,4 @@ export default function AdminChecklists() {
     </div>
   );
 }
+
