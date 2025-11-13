@@ -1,7 +1,24 @@
 // API Client per il backend Python
-// L'URL viene preso dalla variabile d'ambiente o usa localhost come default
+// L'URL viene preso dalla variabile d'ambiente o rilevato automaticamente in produzione
 
-const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8080') + '/api';
+// Rileva automaticamente l'URL in produzione
+function getApiBaseUrl() {
+  // Se è definita la variabile d'ambiente, usala
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL + '/api';
+  }
+  
+  // In produzione, usa lo stesso dominio del frontend
+  if (import.meta.env.PROD || window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    // Usa lo stesso protocollo e host del frontend, con /api
+    return window.location.origin + '/api';
+  }
+  
+  // Default per sviluppo locale
+  return 'http://localhost:8000/api';
+}
+
+const API_BASE_URL = getApiBaseUrl();
 
 class ApiClient {
   constructor() {
