@@ -4,7 +4,7 @@ Esegui con: python init_db.py
 """
 
 from app.database import SessionLocal, engine
-from app.models import Base, User, Property, Apartment, Room, ChecklistItem, Supply
+from app.models import Base, User, Property, Apartment, Room, ChecklistItem, ApartmentChecklistItem, Supply, ApartmentSupply
 from app.auth import get_password_hash
 
 def init_database():
@@ -103,45 +103,40 @@ def init_database():
         
         print("Creazione checklist di esempio...")
         
-        # Crea checklist items
+        # Crea checklist items globali (senza apartment_id)
         checklist_items = [
             ChecklistItem(
                 title="Aspirare il pavimento",
                 description="Aspirare tutti i pavimenti della camera",
-                apartment_id=apartment1.id,
-                room_id=rooms[0].id,
+                room_name="Camera da letto",
                 is_mandatory=True,
                 order=1
             ),
             ChecklistItem(
                 title="Cambiare le lenzuola",
                 description="Mettere lenzuola pulite sul letto",
-                apartment_id=apartment1.id,
-                room_id=rooms[0].id,
+                room_name="Camera da letto",
                 is_mandatory=True,
                 order=2
             ),
             ChecklistItem(
                 title="Pulire il bagno",
                 description="Pulire lavandino, WC, doccia",
-                apartment_id=apartment1.id,
-                room_id=rooms[1].id,
+                room_name="Bagno",
                 is_mandatory=True,
                 order=3
             ),
             ChecklistItem(
                 title="Rifornire asciugamani",
                 description="Mettere asciugamani puliti",
-                apartment_id=apartment1.id,
-                room_id=rooms[1].id,
+                room_name="Bagno",
                 is_mandatory=True,
                 order=4
             ),
             ChecklistItem(
                 title="Pulire il soggiorno",
                 description="Spolverare e pulire il soggiorno",
-                apartment_id=apartment1.id,
-                room_id=rooms[2].id,
+                room_name="Soggiorno",
                 is_mandatory=False,
                 order=5
             )
@@ -152,54 +147,89 @@ def init_database():
         
         db.commit()
         
+        # Refresh per avere gli ID
+        for item in checklist_items:
+            db.refresh(item)
+        
+        # Assegna le checklist all'appartamento 1
+        print("Assegnazione checklist agli appartamenti...")
+        for idx, item in enumerate(checklist_items):
+            apartment_checklist = ApartmentChecklistItem(
+                apartment_id=apartment1.id,
+                checklist_item_id=item.id,
+                order=idx + 1
+            )
+            db.add(apartment_checklist)
+        
+        db.commit()
+        
         print("Creazione forniture di esempio...")
         
-        # Crea supplies
+        # Crea supplies globali (senza apartment_id)
         supplies = [
             Supply(
                 name="Carta igienica",
-                apartment_id=apartment1.id,
-                quantity=12,
-                min_quantity=5,
+                total_quantity=12,
                 unit="rotoli",
-                category="bathroom"
+                category="bathroom",
+                room="Bagno"
             ),
             Supply(
                 name="Asciugamani",
-                apartment_id=apartment1.id,
-                quantity=8,
-                min_quantity=4,
+                total_quantity=8,
                 unit="pz",
-                category="bathroom"
+                category="bathroom",
+                room="Bagno"
             ),
             Supply(
                 name="Detergente pavimenti",
-                apartment_id=apartment1.id,
-                quantity=2,
-                min_quantity=1,
+                total_quantity=2,
                 unit="lt",
-                category="cleaning"
+                category="cleaning",
+                room="generale"
             ),
             Supply(
                 name="Shampoo",
-                apartment_id=apartment1.id,
-                quantity=5,
-                min_quantity=3,
+                total_quantity=5,
                 unit="pz",
-                category="bathroom"
+                category="bathroom",
+                room="Bagno"
             ),
             Supply(
                 name="Sacchetti spazzatura",
-                apartment_id=apartment1.id,
-                quantity=15,
-                min_quantity=10,
+                total_quantity=15,
                 unit="pz",
-                category="cleaning"
+                category="cleaning",
+                room="generale"
             )
         ]
         
         for supply in supplies:
             db.add(supply)
+        
+        db.commit()
+        
+        # Refresh per avere gli ID
+        for supply in supplies:
+            db.refresh(supply)
+        
+        # Assegna le supplies all'appartamento 1 con required_quantity
+        print("Assegnazione forniture agli appartamenti...")
+        apartment_supplies_data = [
+            (supplies[0], 5),   # Carta igienica - minimo 5
+            (supplies[1], 4),   # Asciugamani - minimo 4
+            (supplies[2], 1),  # Detergente - minimo 1
+            (supplies[3], 3),  # Shampoo - minimo 3
+            (supplies[4], 10)  # Sacchetti - minimo 10
+        ]
+        
+        for supply, required_qty in apartment_supplies_data:
+            apartment_supply = ApartmentSupply(
+                apartment_id=apartment1.id,
+                supply_id=supply.id,
+                required_quantity=required_qty
+            )
+            db.add(apartment_supply)
         
         db.commit()
         
